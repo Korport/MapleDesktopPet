@@ -23,9 +23,10 @@ const PROJECT_DIR = path.join(__dirname, '..');
 const ACTIONS_SERVER_PATH = path.join(__dirname, 'mcp', 'actions-server.js');
 let mcpConfigPath = null;
 
-// Writes the local MCP server config (once) that exposes exactly two safe
-// desktop actions — open_path / open_url — to the Copilot CLI session. See
-// src/mcp/actions-server.js for what those tools can and can't do.
+// Writes the local MCP server config (once) that exposes exactly three safe
+// desktop actions — open_path / open_url / git_commit_and_push — to the
+// Copilot CLI session. See src/mcp/actions-server.js for what those tools
+// can and can't do.
 function ensureMcpConfig() {
   if (mcpConfigPath) return mcpConfigPath;
   const dir = app.getPath('userData');
@@ -52,13 +53,21 @@ function ensureMcpConfig() {
 // Permissions granted to every call (see `copilot help permissions`):
 //   --add-dir / cwd   file read+write access scoped to this project folder
 //   --allow-tool read/write   lets it view and edit its OWN source files
-//   --allow-tool mascot_actions   lets it open a path in Explorer or a URL
-//                                  in the browser via the tiny MCP server
-//                                  above — nothing else (no general shell).
+//   --allow-tool mascot_actions   lets it open a path in Explorer, open a URL
+//                                  in the browser, and commit+push its own
+//                                  code via the tiny MCP server above —
+//                                  nothing else (no general shell).
 // Deliberately hard-blocked: shell — Copilot auto-runs commands it decides
 // are "read-only" (whoami, git status, etc.) even without an allow rule, so
 // omitting a shell rule is NOT enough; --deny-tool shell blocks ALL shell
-// execution, overriding that auto-approve behavior.
+// execution, overriding that auto-approve behavior. We deliberately do NOT
+// grant raw shell(git:*)/shell(gh:*) access: Copilot's permission matching
+// only works at the subcommand level ("git push", "git reset"), not on
+// individual flags, so there is no way to allow "git push" while denying
+// "git push --force" (same for "git reset" vs "git reset --hard") — tested
+// and confirmed. Instead, committing/pushing goes through the
+// git_commit_and_push tool in src/mcp/actions-server.js, which runs a FIXED
+// add/commit/push sequence with no flags ever reachable from the model.
 // Pre-trusts this project folder in Copilot's own config so we don't have to
 // pass --trust-folder on every call (it can't be combined with --session-id
 // anyway — a CLI restriction). This only ever adds our own folder, and only
@@ -97,6 +106,9 @@ function askCopilot(message) {
       'Update it with lasting preferences, decisions, and ideas from this conversation, keeping notes concise and avoiding duplicates. ' +
       'Do not store secrets, sensitive personal details, or full transcripts. Respect requests not to remember or to remove notes. ' +
       'Only claim a memory was saved after a successful file write, and report any memory read or write failure. ' +
+      'You do not have general git or shell access. When you finish a code change you are happy with, call the ' +
+      'git_commit_and_push tool with a short, descriptive commit message to save and publish it to GitHub — that ' +
+      'is the only way to commit or push. If it reports nothing to commit, or an error, tell the user exactly what it said. ' +
       `The user says: ${message}`;
     const args = ['-p', prompt, '-s', '--no-color'];
     args.push(copilotSessionStarted ? `--resume=${copilotSessionId}` : `--session-id=${copilotSessionId}`);
