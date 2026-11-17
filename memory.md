@@ -24,6 +24,15 @@ to provide conversation context. It is not model training or a full chat log.
   cleaner transparent edges. No animation format has been chosen.
 - The user is planning animation assets and wants a broad set of Maple reactions,
   including email and Teams alerts. Asset names and animation wiring are proposed.
+- The user wants Maple to eventually act as a desktop frontend for their own
+  internal Copilot "Autopilot" (an org-internal autonomous Copilot agent),
+  once/if that Autopilot exposes MCP access. The idea: keep Maple's existing
+  Electron UI (chat box, sprite, speech bubble) but point the backend at the
+  Autopilot session instead of (or alongside) the plain Copilot CLI, so Maple
+  becomes a custom "front door" into it. Blocked on: whether internal
+  Autopilots will support MCP, and what the connection mechanism would be
+  (CLI flag, API, MCP server exposed by Autopilot, etc.) — not yet announced
+  as of this note. Not implemented; purely speculative/future work.
 
 ## Decisions
 
