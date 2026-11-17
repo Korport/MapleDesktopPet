@@ -1,0 +1,143 @@
+:root {
+  --accent-idle: #7b61ff;
+  --accent-listening: #22c55e;
+  --accent-thinking: #f59e0b;
+  --accent-talking: #38bdf8;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+}
+
+#app {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 6px;
+  color: rgba(255,255,255,0.75);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.no-drag { -webkit-app-region: no-drag; }
+
+#controls button {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: white;
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+}
+
+#orb-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+#sprite {
+  width: 170px;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  transition: transform 0.15s ease-out;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.35));
+}
+
+#bubble {
+  position: relative;
+  background: rgba(20, 20, 30, 0.85);
+  color: #eee;
+  border-radius: 12px;
+  padding: 10px 28px 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  width: 100%;
+  margin-bottom: 6px;
+}
+#bubble.hidden { display: none; }
+#bubble-text {
+  max-height: 300px;
+  overflow-y: auto;
+  user-select: text;
+  cursor: text;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+#bubble-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+  font-size: 10px;
+  cursor: pointer;
+}
+#bubble-close:hover { background: rgba(255,255,255,0.25); }
+#bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0 6px;
+  border-style: solid;
+  border-color: rgba(20, 20, 30, 0.85) transparent transparent transparent;
+}
+
+#chat-form {
+  width: 100%;
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+#chat-input {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.85);
+  color: #111;
+  font-size: 13px;
+  outline: none;
+}
+#chat-input::placeholder { color: rgba(0,0,0,0.45); }
+
+#chat-form button {
+  border: none;
+  border-radius: 8px;
+  width: 34px;
+  background: var(--accent-idle);
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}

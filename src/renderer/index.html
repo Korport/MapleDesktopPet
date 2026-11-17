@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Maple</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="drag-handle" class="drag-region">
+      <span id="state-label">idle</span>
+      <div id="controls" class="no-drag">
+        <button id="click-through-btn" title="Toggle click-through (Alt+Shift+C)">⧉</button>
+      </div>
+    </div>
+
+    <div id="bubble" class="no-drag hidden">
+      <button id="bubble-close" title="Dismiss">✕</button>
+      <div id="bubble-text"></div>
+    </div>
+
+    <div id="orb-wrap" class="no-drag">
+      <img id="sprite" src="../assets/sprites/01-neutral.png" alt="Maple, an autumn fox companion" draggable="false" />
+    </div>
+
+    <form id="chat-form" class="no-drag">
+      <input id="chat-input" type="text" placeholder="Talk to Maple…" autocomplete="off" />
+      <button type="submit">➤</button>
+    </form>
+  </div>
+
+  <script src="sprite.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
