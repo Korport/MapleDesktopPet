@@ -24,9 +24,11 @@ files/folders/webpages for you, all within tightly scoped permissions.
 - **Self-editing**: Maple is granted `read`/`write` access scoped *only* to
   her own project folder, so she can patch her own source files when asked.
 - **Safe desktop actions** via a tiny custom local MCP server
-  (`src/mcp/actions-server.js`) that exposes exactly two tools:
+  (`src/mcp/actions-server.js`) that exposes exactly three tools:
   - `open_path` — open a file or folder in File Explorer (path must exist)
   - `open_url` — open an `http(s)://` URL in the default browser
+  - `git_commit_and_push` — stage, commit, and push her own code changes to
+    GitHub via a fixed add/commit/push sequence (no raw git/shell access)
   - General shell execution is explicitly denied (`--deny-tool shell`), so
     she cannot run arbitrary commands.
 - **Click-through mode** (`Alt+Shift+C`) to let mouse clicks pass through her
@@ -89,7 +91,7 @@ src/
                         bridge (askCopilot).
   preload.js            contextBridge API exposed to the renderer.
   mcp/
-    actions-server.js   Local MCP server: open_path / open_url tools only.
+    actions-server.js   Local MCP server: open_path / open_url / git_commit_and_push only.
   renderer/
     index.html           Window markup (sprite, bubble, chat form, tray controls).
     renderer.js           Chat wiring, Copilot bridge calls, reaction picking.
@@ -113,12 +115,27 @@ permissions on every call (see the comments in `src/main.js`):
   files anywhere else on disk.
 - `--allow-tool read` / `--allow-tool write` — lets her view and edit her
   own source.
-- `--allow-tool mascot_actions` — the two safe tools above, nothing else.
+- `--allow-tool mascot_actions` — the three safe tools above, nothing else.
 - `--deny-tool shell` — **hard-blocks all shell command execution**,
   including commands Copilot might otherwise auto-run as "read-only".
 
+Git/GitHub access works the same way, deliberately *not* via raw shell
+permissions. Copilot's permission matching only works at the subcommand
+level (e.g. `shell(git push)`, `shell(git reset)`) — it cannot allow a
+subcommand while denying one of its flags, so there is no way to permit
+`git push` while blocking `git push --force` (same for `git reset` vs.
+`git reset --hard`). Granting `shell(git:*)` would therefore have allowed
+those destructive variants too. Instead, `git_commit_and_push` runs a single
+fixed `add -A` → `commit -m <message>` → `push origin <current-branch>`
+sequence via `execFile` (array argv, no shell parsing) — the commit message
+is the only free-form input, and no flag the model could add is ever
+forwarded to git. Force-pushing, resetting, and rewriting history are
+simply not reachable through this tool, and raw shell `git`/`gh` remain
+fully denied.
+
 If you extend Maple with more capabilities, keep this same pattern: add a
-narrowly-scoped custom MCP tool rather than widening shell access.
+narrowly-scoped custom MCP tool with a fixed command sequence rather than
+widening shell access.
 
 ## Known limitations / ideas for later
 
