@@ -1,6 +1,6 @@
 /**
  * Sprite-based mascot ("Maple"). Swaps a single <img> between
- * pre-rendered PNGs instead of drawing on canvas. Mirrors the old Orb API
+ * animated WebPs and PNG poses instead of drawing on canvas. Mirrors the old Orb API
  * (start/setState/setAmplitude) so renderer.js barely had to change.
  *
  * States fall into three buckets:
@@ -14,6 +14,22 @@ const Sprite = (() => {
   const img = document.getElementById('sprite');
   const stateLabel = document.getElementById('state-label');
   const BASE = '../assets/sprites/';
+  const ANIMATION_BASE = '../assets/Maple-Animation-Pack/Maple-Animations/';
+  const ANIMATIONS = {
+    idle_neutral: 'maple-idle.webp',
+    idle_blink: 'maple-idle.webp',
+    idle_tail_swish: 'maple-idle.webp',
+    thinking: 'maple-thinking.webp',
+    listening: 'maple-ear-perk.webp',
+    happy: 'maple-happy.webp',
+    celebrating: 'maple-happy.webp',
+    confused: 'maple-head-tilt.webp',
+    greeting: 'maple-wave.webp',
+    ack: 'maple-ear-perk.webp',
+  };
+  const animationCache = new Map();
+  let requestedSource = null;
+  let showVersion = 0;
 
   const FILES = {
     idle_neutral: '01-neutral.png',
@@ -91,8 +107,60 @@ const Sprite = (() => {
   }
 
   function show(key) {
-    img.src = BASE + FILES[key];
     if (stateLabel) stateLabel.textContent = key.replace(/_/g, ' ');
+    const source = ANIMATIONS[key] ? ANIMATION_BASE + ANIMATIONS[key] : BASE + FILES[key];
+    if (source === requestedSource) return;
+    requestedSource = source;
+    const version = ++showVersion;
+    if (!ANIMATIONS[key]) {
+      img.src = source;
+      return;
+    }
+    if (!animationCache.has(source)) {
+      animationCache.set(source, loadAnimation(source));
+    }
+    animationCache.get(source).then(url => {
+      if (version === showVersion) img.src = url;
+    });
+  }
+
+  async function loadAnimation(source) {
+    try {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error(`Could not load ${source}`);
+      const buffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const view = new DataView(buffer);
+      const tag = offset => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+      if (bytes.length < 12 || tag(0) !== 'RIFF' || tag(8) !== 'WEBP' ||
+          view.getUint32(4, true) + 8 !== bytes.length) {
+        throw new Error(`Invalid WebP: ${source}`);
+      }
+      let frames = 0;
+      for (let offset = 12; offset < bytes.length;) {
+        if (offset + 8 > bytes.length) throw new Error(`Truncated WebP: ${source}`);
+        const size = view.getUint32(offset + 4, true);
+        const end = offset + 8 + size + (size % 2);
+        if (end > bytes.length) throw new Error(`Truncated WebP chunk: ${source}`);
+        if (tag(offset) === 'ANMF') {
+          if (size < 16) throw new Error(`Invalid WebP frame: ${source}`);
+          const position = offset + 20;
+          const duration = bytes[position] | bytes[position + 1] << 8 | bytes[position + 2] << 16;
+          // Chromium replaces delays below 11ms with 100ms; keep fast frames above that floor.
+          const faster = Math.max(20, Math.round(duration / 1.5));
+          bytes[position] = faster & 255;
+          bytes[position + 1] = (faster >> 8) & 255;
+          bytes[position + 2] = (faster >> 16) & 255;
+          frames++;
+        }
+        offset = end;
+      }
+      if (!frames) throw new Error(`No animation frames: ${source}`);
+      return URL.createObjectURL(new Blob([buffer], { type: 'image/webp' }));
+    } catch (error) {
+      console.error('Maple animation loading failed; using original playback.', source, error);
+      return source;
+    }
   }
 
   function stopIdleLoop() {

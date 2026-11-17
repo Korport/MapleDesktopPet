@@ -19,9 +19,9 @@ to provide conversation context. It is not model training or a full chat log.
   an organization-approved integration. Feasibility and access are unverified;
   not implemented.
 - Add a model picker to Maple's system tray menu. Deferred; not implemented.
-- Explore animated sprites for smoother movements. GIFs can play in the existing
-  image element with filename mapping changes; animated WebP or APNG may provide
-  cleaner transparent edges. No animation format has been chosen.
+- Maple uses the supplied Maple-Animation-Pack WebPs for matching idle,
+  greeting, thinking, listening, and reaction states at 1.5x playback speed.
+  States without matching animations retain their PNG poses.
 - The user is planning animation assets and wants a broad set of Maple reactions,
   including email and Teams alerts. Asset names and animation wiring are proposed.
 - The user wants Maple to eventually act as a desktop frontend for their own

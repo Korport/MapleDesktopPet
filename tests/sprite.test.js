@@ -100,3 +100,27 @@ test('invalid animation data logs an error and retains original playback', async
   assert.match(app.assignments[0], /maple-thinking\.webp$/);
   assert.equal(app.blobs.length, 0);
 });
+
+test('plays the supplied animation pack for matching states', async () => {
+  const states = {
+    idle: 'maple-idle.webp',
+    greeting: 'maple-wave.webp',
+    thinking: 'maple-thinking.webp',
+    listening: 'maple-ear-perk.webp',
+    happy: 'maple-happy.webp',
+    celebrating: 'maple-happy.webp',
+    confused: 'maple-head-tilt.webp',
+    ack: 'maple-ear-perk.webp',
+  };
+  for (const [state, filename] of Object.entries(states)) {
+    const app = setup(async source => {
+      assert.equal(source, `../assets/Maple-Animation-Pack/Maple-Animations/${filename}`);
+      return fs.readFileSync(path.resolve(__dirname, '..', 'src', 'renderer', source));
+    });
+    app.sprite.setState(state);
+    await settle();
+    assert.deepEqual(app.errors, [], state);
+    assert.equal(app.blobs.length, 1, state);
+    assert.deepEqual(app.assignments, ['blob:maple-1'], state);
+  }
+});
