@@ -6,7 +6,7 @@ through a typing box, and answers using the **GitHub Copilot CLI** running
 locally on your machine. She can also edit her own source code and open
 files/folders/webpages for you, all within tightly scoped permissions.
 
-![Maple idle](src/assets/sprites/01-neutral.png)
+![Maple idle animation](src/assets/Maple-Animation-Pack/Maple-Animations/maple-idle.webp)
 
 ## Features
 
@@ -15,10 +15,12 @@ files/folders/webpages for you, all within tightly scoped permissions.
   dragged fully off-screen).
 - **Chat box** below her with a speech bubble above that grows to fit longer
   replies, with a dismiss button and selectable/copyable text.
-- **Sprite-based animation** with idle variety (blinking, tail-swishing,
-  yawning, napping after inactivity), activity states (thinking / talking /
-  listening), and reaction poses (happy, celebrating, confused, concerned,
-  loving, etc.) picked automatically from the Copilot CLI's reply.
+- **Animated WebP sprites** from the Maple Animation Pack, played at 1.5x
+  speed for idle, greeting, thinking, listening, and matching reactions
+  (happy, celebrating, confused, and quick acknowledgements). States without
+  a matching animation retain their PNG poses, including talking, yawning,
+  stretching, and napping after inactivity. Reactions are picked automatically
+  from the Copilot CLI's reply.
 - **Powered by GitHub Copilot CLI** (`copilot` on your PATH) — each chat
   session keeps conversational context via `--resume`.
 - **Self-editing**: Maple is granted `read`/`write` access scoped *only* to
@@ -95,10 +97,12 @@ src/
   renderer/
     index.html           Window markup (sprite, bubble, chat form, tray controls).
     renderer.js           Chat wiring, Copilot bridge calls, reaction picking.
-    sprite.js             Sprite swapping state machine (idle cycle, reactions).
+    sprite.js             Animated WebP playback and PNG pose state machine.
     style.css              Styling for the transparent window, bubble, chat input.
   assets/
-    sprites/              23 PNG poses (idle, reactions, interactions).
+    Maple-Animation-Pack/
+      Maple-Animations/   Animated WebPs, APNG alternatives, and an HTML preview.
+    sprites/              23 PNG poses for states without matching animations.
     tray-icon.png          System tray icon.
 build/
   icon.png               App icon used by electron-builder for the installer.
@@ -140,8 +144,9 @@ widening shell access.
 ## Known limitations / ideas for later
 
 See `memory.md` for Maple's own running list of proposed-but-not-yet-built
-ideas (voice input, email/Teams alerts, animated sprite transitions, a model
-picker in the tray menu, etc.).
+ideas (email/Teams notification integrations, a model picker in the tray menu,
+etc.). Email and Teams alert animation assets are included in the animation
+pack, but notification integrations are not implemented.
 
 ## License
 

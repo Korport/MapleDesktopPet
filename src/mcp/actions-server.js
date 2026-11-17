@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Tiny local MCP server exposing exactly three SAFE desktop actions for the
+ * Tiny local MCP server exposing exactly five SAFE desktop actions for the
  * mascot's Copilot CLI session: opening a path in File Explorer, opening a
- * URL in the default browser, and committing/pushing THIS project's own
- * repo. Nothing else — no general shell, no arbitrary process launch.
+ * URL in the default browser, committing/pushing THIS project's own repo,
+ * running its test suite, and requesting a self-restart so code changes take
+ * effect. Nothing else — no general shell, no arbitrary process launch.
  *
  * Safety notes:
  *  - open_path/open_url call `explorer.exe` directly via execFile (array
@@ -26,15 +27,28 @@
  *  - git_commit_and_push always runs with cwd pinned to THIS project's
  *    repo root (REPO_ROOT below) — it can never target any other
  *    directory or repository.
+ *  - run_tests runs exactly `node --test tests` (no caller-supplied args at
+ *    all) via execFile with cwd pinned to REPO_ROOT. There is no way to pass
+ *    extra flags or a different command through this tool.
+ *  - restart_app does not touch any process directly. It only writes a
+ *    timestamp into a sentinel file whose path is handed to this server via
+ *    the MAPLE_RESTART_SENTINEL environment variable (set by main.js). The
+ *    running Electron app polls for that file after each reply and, when it
+ *    appears, relaunches itself in-process via Electron's own
+ *    app.relaunch()/app.quit() — see src/main.js. This tool has no ability
+ *    to kill or start any process itself.
  */
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execFile } = require('child_process');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { z } = require('zod');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
+const RESTART_SENTINEL_PATH =
+  process.env.MAPLE_RESTART_SENTINEL || path.join(os.tmpdir(), 'maple-restart-requested');
 
 const server = new McpServer({ name: 'mascot-actions', version: '1.0.0' });
 
@@ -157,6 +171,62 @@ server.registerTool(
       const detail = (err.stderr || err.stdout || err.message || String(err)).toString().trim();
       return { content: [{ type: 'text', text: `git_commit_and_push failed: ${detail}` }], isError: true };
     }
+  }
+);
+
+const MAX_TEST_OUTPUT = 6000;
+
+server.registerTool(
+  'run_tests',
+  {
+    title: "Run Maple's test suite",
+    description:
+      'Runs the fixed command `node --test tests` in the project folder and reports the result — exit code ' +
+      'plus combined stdout/stderr (truncated if very long). No arguments, flags, or alternate commands can be ' +
+      'passed through this tool. Use this to check a code change before committing it.',
+    inputSchema: {},
+  },
+  async () => {
+    const testsDir = path.join(REPO_ROOT, 'tests');
+    if (!fs.existsSync(testsDir)) {
+      return { content: [{ type: 'text', text: 'No tests/ directory found — nothing to run.' }] };
+    }
+    return new Promise((resolve) => {
+      execFile('node', ['--test', 'tests'], { cwd: REPO_ROOT, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+        let combined = `${stdout}\n${stderr}`.trim();
+        if (combined.length > MAX_TEST_OUTPUT) {
+          combined = combined.slice(-MAX_TEST_OUTPUT) + '\n…(truncated, showing the last portion of output)';
+        }
+        const exitCode = err && typeof err.code === 'number' ? err.code : 0;
+        resolve({
+          content: [{ type: 'text', text: `Test run exited with code ${exitCode}.\n\n${combined}` }],
+          // Not an MCP tool error — a failing test run is still a valid,
+          // informative result for the model to read and report honestly.
+        });
+      });
+    });
+  }
+);
+
+server.registerTool(
+  'restart_app',
+  {
+    title: 'Restart Maple to apply code changes',
+    description:
+      'Requests that Maple relaunch herself so that changes just made to main.js or the renderer files take ' +
+      "effect (Electron does not hot-reload — edited code only runs after a restart). This is the ONLY way to " +
+      'restart; it cannot kill or start arbitrary processes. The current reply still finishes displaying first; ' +
+      'the actual relaunch happens a couple of seconds later, handled entirely by the running app itself.',
+    inputSchema: {},
+  },
+  async () => {
+    fs.writeFileSync(RESTART_SENTINEL_PATH, String(Date.now()));
+    return {
+      content: [{
+        type: 'text',
+        text: 'Restart requested — Maple will relaunch automatically in a few seconds to apply the changes.',
+      }],
+    };
   }
 );
 

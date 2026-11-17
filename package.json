@@ -9,6 +9,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "test": "node --test tests",
     "dist": "electron-builder",
     "dist:dir": "electron-builder --dir"
   },

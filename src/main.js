@@ -23,10 +23,18 @@ const PROJECT_DIR = path.join(__dirname, '..');
 const ACTIONS_SERVER_PATH = path.join(__dirname, 'mcp', 'actions-server.js');
 let mcpConfigPath = null;
 
-// Writes the local MCP server config (once) that exposes exactly three safe
-// desktop actions — open_path / open_url / git_commit_and_push — to the
-// Copilot CLI session. See src/mcp/actions-server.js for what those tools
-// can and can't do.
+// Path to the sentinel file the restart_app MCP tool writes to signal a
+// requested relaunch. Handed to the MCP server via an env var so both sides
+// agree on the same path without either hardcoding it. See the big comment
+// on restart_app in src/mcp/actions-server.js for the full design.
+function restartSentinelPath() {
+  return path.join(app.getPath('userData'), 'maple-restart-requested');
+}
+
+// Writes the local MCP server config (once) that exposes exactly five safe
+// desktop actions — open_path / open_url / git_commit_and_push / run_tests /
+// restart_app — to the Copilot CLI session. See src/mcp/actions-server.js
+// for what those tools can and can't do.
 function ensureMcpConfig() {
   if (mcpConfigPath) return mcpConfigPath;
   const dir = app.getPath('userData');
@@ -38,6 +46,7 @@ function ensureMcpConfig() {
         type: 'local',
         command: 'node',
         args: [ACTIONS_SERVER_PATH],
+        env: { MAPLE_RESTART_SENTINEL: restartSentinelPath() },
       },
     },
   };
@@ -54,9 +63,10 @@ function ensureMcpConfig() {
 //   --add-dir / cwd   file read+write access scoped to this project folder
 //   --allow-tool read/write   lets it view and edit its OWN source files
 //   --allow-tool mascot_actions   lets it open a path in Explorer, open a URL
-//                                  in the browser, and commit+push its own
-//                                  code via the tiny MCP server above —
-//                                  nothing else (no general shell).
+//                                  in the browser, commit+push its own code,
+//                                  run its test suite, and request a
+//                                  self-restart — via the tiny MCP server
+//                                  above. Nothing else (no general shell).
 // Deliberately hard-blocked: shell — Copilot auto-runs commands it decides
 // are "read-only" (whoami, git status, etc.) even without an allow rule, so
 // omitting a shell rule is NOT enough; --deny-tool shell blocks ALL shell
@@ -106,9 +116,12 @@ function askCopilot(message) {
       'Update it with lasting preferences, decisions, and ideas from this conversation, keeping notes concise and avoiding duplicates. ' +
       'Do not store secrets, sensitive personal details, or full transcripts. Respect requests not to remember or to remove notes. ' +
       'Only claim a memory was saved after a successful file write, and report any memory read or write failure. ' +
-      'You do not have general git or shell access. When you finish a code change you are happy with, call the ' +
-      'git_commit_and_push tool with a short, descriptive commit message to save and publish it to GitHub — that ' +
-      'is the only way to commit or push. If it reports nothing to commit, or an error, tell the user exactly what it said. ' +
+      'You do not have general git or shell access. When you finish a code change you are happy with, you may call ' +
+      'the run_tests tool to check it, then call git_commit_and_push with a short, descriptive commit message to ' +
+      'save and publish it to GitHub — that is the only way to commit or push. After a change to main.js or any ' +
+      'renderer file, call restart_app so the change actually takes effect (Electron does not hot-reload); tell the ' +
+      "user you're restarting to apply it. If any of these tools report nothing to do, or an error, tell the user " +
+      'exactly what they said. ' +
       `The user says: ${message}`;
     const args = ['-p', prompt, '-s', '--no-color'];
     args.push(copilotSessionStarted ? `--resume=${copilotSessionId}` : `--session-id=${copilotSessionId}`);
@@ -281,7 +294,37 @@ function resizeToContent(contentHeight) {
   win.setBounds({ x, y, width: WIN_WIDTH, height });
 }
 
+// Checked right after every Copilot reply: if the restart_app MCP tool
+// signaled a restart (by writing the sentinel file — see
+// src/mcp/actions-server.js), relaunch Maple via Electron's own
+// app.relaunch()/app.quit(). The short delay gives the renderer a moment to
+// actually display the just-returned reply bubble before the window is
+// torn down. This never kills or spawns any process directly — it's purely
+// Electron restarting its own, single, already-running instance.
+function checkRestartRequested() {
+  const sentinel = restartSentinelPath();
+  if (!fs.existsSync(sentinel)) return;
+  try {
+    fs.unlinkSync(sentinel);
+  } catch {
+    // Not fatal — worst case we'd check again next reply, but proceed with
+    // the restart regardless since the signal was clearly present.
+  }
+  setTimeout(() => {
+    app.relaunch();
+    app.quit();
+  }, 1500);
+}
+
 app.whenReady().then(() => {
+  // Clear any stale restart signal left over from a prior crash/session so
+  // only a restart requested DURING this running session triggers a relaunch.
+  try {
+    fs.unlinkSync(restartSentinelPath());
+  } catch {
+    // Fine if it didn't exist.
+  }
+
   createWindow();
   createTray();
 
@@ -320,7 +363,9 @@ ipcMain.on('mascot:set-click-through', (_event, enabled) => {
 });
 
 ipcMain.handle('mascot:ask-copilot', async (_event, message) => {
-  return askCopilot(message);
+  const reply = await askCopilot(message);
+  checkRestartRequested();
+  return reply;
 });
 
 ipcMain.on('mascot:resize-content', (_event, contentHeight) => {
