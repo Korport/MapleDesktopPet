@@ -13,6 +13,21 @@
     <p>Live GitHub Copilot events: reply text, tool calls and results, progress,
       errors, and any exposed reasoning summaries. Read-only, not an interactive
       terminal; private internal reasoning is unavailable. Quiet tools may pause output.</p>
+    <section class="usage" aria-label="Current session token and cost tracker">
+      <h2>Session tokens &amp; cost</h2>
+      <div class="usage-grid">
+        <div>Total tokens<strong id="usage-total">Unavailable</strong></div>
+        <div>Input tokens<strong id="usage-input">Unavailable</strong></div>
+        <div>Output tokens<strong id="usage-output">Unavailable</strong></div>
+        <div>Cost (AI credits)<strong id="usage-credits">Unavailable</strong></div>
+        <div>Premium requests<strong id="usage-requests">Unavailable</strong></div>
+      </div>
+      <p id="usage-details"></p>
+      <p id="usage-status" role="status">Loading session usage...</p>
+      <p>Totals refresh after each reply and include subagents. Cache tokens are included
+        in input; reasoning tokens are included in output. Cost uses reported billing
+        units, not dollars or an invoice. A new session starts when Maple restarts.</p>
+    </section>
     <label><input id="follow" type="checkbox" checked> Follow latest output</label>
     <span id="status" role="status">Connecting...</span>
     <div class="download-controls">

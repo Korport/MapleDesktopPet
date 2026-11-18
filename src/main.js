@@ -143,6 +143,63 @@ function ensureFolderTrusted() {
 
 const copilotSessionId = crypto.randomUUID();
 let copilotSessionStarted = false;
+let sessionUsage = {
+  sessionId: copilotSessionId,
+  turns: 0,
+  updating: false,
+  totals: null,
+  error: null,
+};
+
+function publishUsage() {
+  if (activityWin && !activityWin.isDestroyed()) {
+    activityWin.webContents.send('activity:usage-changed', sessionUsage);
+  }
+}
+
+async function updateSessionUsage(filePath) {
+  try {
+    const report = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
+    if (!report || !report.modelMetrics || typeof report.modelMetrics !== 'object' ||
+        Array.isArray(report.modelMetrics)) {
+      throw new Error('Copilot returned an invalid session usage report.');
+    }
+    const valid = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const models = Object.values(report.modelMetrics);
+    const sum = (field) => {
+      const values = models.map((model) => model?.usage?.[field]);
+      return values.length && values.every(valid)
+        ? values.reduce((total, value) => total + value, 0) : null;
+    };
+    // The export is cumulative across --resume calls; replace, never add it.
+    sessionUsage.totals = {
+      inputTokens: sum('inputTokens'),
+      outputTokens: sum('outputTokens'),
+      cacheReadTokens: sum('cacheReadTokens'),
+      cacheWriteTokens: sum('cacheWriteTokens'),
+      reasoningTokens: sum('reasoningTokens'),
+      aiCredits: valid(report.totalNanoAiu) && report.aiCreditsStatus !== 'unavailable'
+        ? report.totalNanoAiu / 1e9 : null,
+      aiCreditsStatus: report.aiCreditsStatus || 'reported',
+      premiumRequests: valid(report.totalPremiumRequestCost) ? report.totalPremiumRequestCost : null,
+    };
+  } catch (error) {
+    sessionUsage.error = `Unable to update session usage: ${error.message}`;
+    appendActivity(`\n[${sessionUsage.error}]\n`);
+  } finally {
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        const message = `Unable to remove temporary usage report: ${error.message}`;
+        sessionUsage.error = sessionUsage.error ? `${sessionUsage.error} ${message}` : message;
+        appendActivity(`\n[${message}]\n`);
+      }
+    }
+    sessionUsage.updating = false;
+    publishUsage();
+  }
+}
 
 function askCopilot(message, onProgress = () => {}) {
   return new Promise((resolve, reject) => {
@@ -166,7 +223,9 @@ function askCopilot(message, onProgress = () => {}) {
       "user you're restarting to apply it. If any of these tools report nothing to do, or an error, tell the user " +
       'exactly what they said. ' +
       `The user says: ${message}`;
-    const args = ['-p', prompt, '--output-format', 'json', '--no-color', '--stream', 'on'];
+    const usagePath = path.join(app.getPath('userData'), `maple-usage-${copilotSessionId}-${crypto.randomUUID()}.json`);
+    const args = ['-p', prompt, '--output-format', 'json', '--no-color', '--stream', 'on',
+      '--usage-output-file', usagePath];
     args.push(copilotSessionStarted ? `--resume=${copilotSessionId}` : `--session-id=${copilotSessionId}`);
     copilotSessionStarted = true;
     args.push(
@@ -183,6 +242,8 @@ function askCopilot(message, onProgress = () => {}) {
     // quoting them, so a multi-word message gets split into extra CLI args.
     // Quote everything ourselves and hand spawn a single command string.
     const quote = (a) => `"${String(a).replace(/"/g, '\\"')}"`;
+    sessionUsage = { ...sessionUsage, turns: sessionUsage.turns + 1, updating: true, error: null };
+    publishUsage();
     appendActivity(`\n--- ${new Date().toLocaleTimeString()} | Working ---\nYou: ${message}\n\n`);
     const child = isWin
       ? spawn(['copilot.cmd', ...args].map(quote).join(' '), { shell: true, windowsHide: true, cwd: PROJECT_DIR })
@@ -264,11 +325,15 @@ function askCopilot(message, onProgress = () => {}) {
     });
 
     child.on('error', (err) => {
+      sessionUsage.updating = false;
+      sessionUsage.error = `Usage unavailable: Copilot failed to start: ${err.message}`;
+      publishUsage();
       appendActivity(`\n[Failed to start: ${err.message}]\n`);
       reject(err);
     });
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
       consumeLine(pendingOutput);
+      await updateSessionUsage(usagePath);
       if (code !== 0) {
         appendActivity(`\n[Process exited: ${code}]\n`);
         reject(new Error(stderr.trim() || `copilot exited with code ${code}`));
@@ -508,6 +573,13 @@ ipcMain.handle('activity:snapshot', (event) => {
     throw new Error('Activity is only available in the Maple activity window.');
   }
   return activityText;
+});
+
+ipcMain.handle('activity:usage', (event) => {
+  if (!activityWin || event.sender !== activityWin.webContents) {
+    throw new Error('Usage is only available in the Maple activity window.');
+  }
+  return sessionUsage;
 });
 
 ipcMain.handle('activity:download', async (event) => {

@@ -6,6 +6,43 @@ const downloadStatus = document.getElementById('download-status');
 let receivedLiveUpdate = false;
 let hasOutput = false;
 let downloading = false;
+let receivedUsageUpdate = false;
+
+function renderUsage(usage) {
+  const totals = usage.totals;
+  const format = (value, digits = 0) => value == null
+    ? 'Unavailable' : value.toLocaleString(undefined, { maximumFractionDigits: digits });
+  const total = totals?.inputTokens != null && totals?.outputTokens != null
+    ? totals.inputTokens + totals.outputTokens : null;
+  document.getElementById('usage-total').textContent = format(total);
+  document.getElementById('usage-input').textContent = format(totals?.inputTokens);
+  document.getElementById('usage-output').textContent = format(totals?.outputTokens);
+  const credits = totals?.aiCredits;
+  document.getElementById('usage-credits').textContent =
+    (credits > 0 && credits < 0.000001 ? '<0.000001' : format(credits, 6)) +
+    (credits != null && totals.aiCreditsStatus === 'partial' ? ' (partial)' : '');
+  document.getElementById('usage-requests').textContent = format(totals?.premiumRequests, 4);
+  document.getElementById('usage-details').textContent =
+    `Session ${usage.sessionId} | ${usage.turns} messages | ` +
+    `Cache read: ${format(totals?.cacheReadTokens)} | ` +
+    `Cache written: ${format(totals?.cacheWriteTokens)} | Reasoning: ${format(totals?.reasoningTokens)}`;
+  document.getElementById('usage-status').textContent = usage.error
+    ? `${usage.error} Totals above are the last successful report, if any.`
+    : usage.updating
+      ? 'Working... totals will refresh when this reply finishes.'
+      : totals ? 'Reported cumulative usage for this session.'
+        : 'No usage reported yet. Send Maple a message to begin.';
+}
+
+const unsubscribeUsage = window.mapleActivity.onUsageChange((usage) => {
+  receivedUsageUpdate = true;
+  renderUsage(usage);
+});
+window.mapleActivity.usage().then((usage) => {
+  if (!receivedUsageUpdate) renderUsage(usage);
+}).catch((error) => {
+  document.getElementById('usage-status').textContent = `Unable to load session usage: ${error.message}`;
+});
 
 function render(text) {
   hasOutput = Boolean(text);
@@ -47,4 +84,7 @@ download.addEventListener('click', async () => {
     download.disabled = !hasOutput;
   }
 });
-window.addEventListener('beforeunload', unsubscribe, { once: true });
+window.addEventListener('beforeunload', () => {
+  unsubscribe();
+  unsubscribeUsage();
+}, { once: true });

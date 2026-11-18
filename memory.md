@@ -70,3 +70,8 @@ to provide conversation context. It is not model training or a full chat log.
   streamed progress, tool status, and reasoning summaries when emitted by
   GitHub Copilot. It is replaced by the final reply on completion or error.
   It does not expose private internal reasoning. Implemented.
+- The activity window tracks the current Maple session's cumulative input,
+  output, cache, and reasoning tokens, plus reported AI-credit cost and premium
+  requests. Totals refresh after each reply using GitHub Copilot's usage export,
+  include subagents, and reset when Maple restarts. Missing/partial usage is
+  labeled; billing units are not dollar estimates or an invoice. Implemented.

@@ -6,12 +6,10 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { PassThrough } = require('node:stream');
 
-function setup({ saveDialog, writeFile } = {}) {
+function setup({ saveDialog, writeFile, usageReport, readUsage, removeUsage } = {}) {
   const windows = [];
   const handlers = new Map();
-  const child = new EventEmitter();
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
+  let child;
   let spawnArgs;
   class BrowserWindow extends EventEmitter {
     constructor(options) {
@@ -46,10 +44,23 @@ function setup({ saveDialog, writeFile } = {}) {
         readFileSync: () => '{}',
         mkdirSync() {},
         writeFileSync() {},
-        promises: { writeFile },
+        promises: {
+          writeFile,
+          readFile: readUsage || (async () => JSON.stringify(usageReport || {
+            modelMetrics: {},
+            aiCreditsStatus: 'unavailable',
+          })),
+          unlink: removeUsage || (async () => {}),
+        },
       };
       if (name === 'child_process') return {
-        spawn: (...args) => { spawnArgs = args; return child; },
+        spawn: (...args) => {
+          spawnArgs = args;
+          child = new EventEmitter();
+          child.stdout = new PassThrough();
+          child.stderr = new PassThrough();
+          return child;
+        },
       };
       return require(name);
     },
@@ -58,12 +69,129 @@ function setup({ saveDialog, writeFile } = {}) {
   });
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
   vm.runInContext(`${source}\nglobalThis.api = { showActivity, appendActivity, askCopilot };`, context);
-  return { ...context.api, windows, handlers, child, get spawnArgs() { return spawnArgs; } };
+  return { ...context.api, windows, handlers, get child() { return child; }, get spawnArgs() { return spawnArgs; } };
 }
 
 function writeEvent(app, type, data, extra = {}) {
   app.child.stdout.write(JSON.stringify({ type, data, ...extra }) + '\n');
 }
+
+function usageElements() {
+  return Object.fromEntries([
+    'total', 'input', 'output', 'credits', 'requests', 'details', 'status',
+  ].map((name) => [`usage-${name}`, {}]));
+}
+
+function idleUsageBridge() {
+  return {
+    usage: async () => ({ sessionId: 'test-session', turns: 0, totals: null }),
+    onUsageChange: () => () => {},
+  };
+}
+
+test('tracks cumulative session tokens and billing across prompts without double counting agents or caches', async () => {
+  const report = {
+    totalNanoAiu: 1250000000,
+    aiCreditsStatus: 'complete',
+    totalPremiumRequestCost: 0.5,
+    modelMetrics: {
+      sol: { usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 60, cacheWriteTokens: 10, reasoningTokens: 5 } },
+      other: { usage: { inputTokens: 50, outputTokens: 10, cacheReadTokens: 20, cacheWriteTokens: 0, reasoningTokens: 2 } },
+    },
+    agentMetrics: { main: { modelMetrics: { sol: { usage: { inputTokens: 100 } } } } },
+  };
+  const removed = [];
+  const app = setup({
+    readUsage: async () => JSON.stringify(report),
+    removeUsage: async (file) => removed.push(file),
+  });
+  app.showActivity();
+  const snapshot = () => app.handlers.get('activity:usage')({ sender: app.windows.at(-1).webContents });
+  assert.equal(snapshot().totals, null);
+  assert.throws(() => app.handlers.get('activity:usage')({ sender: {} }), /only available/);
+  for (let turn = 1; turn <= 2; turn++) {
+    const reply = app.askCopilot('Work');
+    assert.equal(snapshot().updating, true);
+    assert.match(app.spawnArgs[0], /"--usage-output-file" "[^"]+maple-usage-[^"]+\.json"/);
+    writeEvent(app, 'assistant.message', { content: 'Done' });
+    app.child.emit('close', 0);
+    assert.equal(await reply, 'Done');
+    const usage = snapshot();
+    assert.equal(usage.turns, turn);
+    assert.equal(usage.updating, false);
+    assert.equal(usage.error, null);
+    assert.equal(usage.totals.inputTokens, report.modelMetrics.sol.usage.inputTokens + 50);
+    assert.equal(usage.totals.outputTokens, 30);
+    assert.equal(usage.totals.cacheReadTokens, 80);
+    assert.equal(usage.totals.reasoningTokens, 7);
+    assert.equal(usage.totals.aiCredits, 1.25);
+    assert.equal(usage.totals.premiumRequests, 0.5);
+    report.modelMetrics.sol.usage.inputTokens = 200;
+  }
+  assert.equal(removed.length, 2);
+  assert.notEqual(removed[0], removed[1]);
+  const sessionId = snapshot().sessionId;
+  app.windows[0].emit('closed');
+  app.showActivity();
+  assert.equal(snapshot().sessionId, sessionId);
+  assert.equal(snapshot().totals.inputTokens, 250);
+});
+
+test('usage preserves reported zero, labels partial or unavailable costs, and rejects invalid token counts', async () => {
+  for (const aiCreditsStatus of ['complete', 'partial', 'unavailable']) {
+    const app = setup({
+      usageReport: {
+        modelMetrics: { sol: { usage: { inputTokens: -1, outputTokens: 0 } } },
+        totalNanoAiu: 0,
+        aiCreditsStatus,
+        totalPremiumRequestCost: 0,
+      },
+    });
+    app.showActivity();
+    const reply = app.askCopilot('Work');
+    writeEvent(app, 'assistant.message', { content: 'Done' });
+    app.child.emit('close', 0);
+    await reply;
+    const { totals } = app.handlers.get('activity:usage')({ sender: app.windows[0].webContents });
+    assert.equal(totals.inputTokens, null);
+    assert.equal(totals.outputTokens, 0);
+    assert.equal(totals.cacheReadTokens, null);
+    assert.equal(totals.aiCreditsStatus, aiCreditsStatus);
+    assert.equal(totals.aiCredits, aiCreditsStatus === 'unavailable' ? null : 0);
+    assert.equal(totals.premiumRequests, 0);
+  }
+});
+
+test('usage report failures are visible without losing the chat reply, and temporary reports are cleaned up', async () => {
+  for (const readUsage of [
+    async () => { throw new Error('Report missing'); },
+    async () => 'not JSON',
+    async () => '{"modelMetrics":[]}',
+  ]) {
+    let removed = false;
+    const app = setup({ readUsage, removeUsage: async () => { removed = true; } });
+    app.showActivity();
+    const reply = app.askCopilot('Work');
+    writeEvent(app, 'assistant.message', { content: 'Done' });
+    app.child.emit('close', 0);
+    assert.equal(await reply, 'Done');
+    const usage = app.handlers.get('activity:usage')({ sender: app.windows[0].webContents });
+    assert.match(usage.error, /Unable to update session usage:/);
+    assert.equal(usage.updating, false);
+    assert.equal(usage.totals, null);
+    assert.equal(removed, true);
+    assert.match(app.windows[0].messages.at(-1)[1], /Unable to update session usage/);
+  }
+  const app = setup({ removeUsage: async () => { throw new Error('Access denied'); } });
+  app.showActivity();
+  const reply = app.askCopilot('Work');
+  writeEvent(app, 'assistant.message', { content: 'Done' });
+  app.child.emit('close', 0);
+  await reply;
+  assert.match(app.handlers.get('activity:usage')({
+    sender: app.windows[0].webContents,
+  }).error, /Unable to remove temporary usage report: Access denied/);
+});
 
 test('streams bounded thinking summaries, commentary and tool progress separately from the reply', async () => {
   const app = setup();
@@ -377,6 +505,7 @@ test('download reports dialog, destination and write failures', async () => {
 
 test('late snapshot cannot overwrite live output and output is rendered as text', async () => {
   const elements = {
+    ...usageElements(),
     output: { scrollHeight: 100 },
     follow: { checked: true, addEventListener() {} },
     status: {},
@@ -390,6 +519,7 @@ test('late snapshot cannot overwrite live output and output is rendered as text'
     window: {
       addEventListener() {},
       mapleActivity: {
+        ...idleUsageBridge(),
         onChange: (callback) => { onChange = callback; return () => {}; },
         snapshot: () => new Promise((resolve) => { resolveSnapshot = resolve; }),
       },
@@ -411,6 +541,7 @@ test('download UI handles saving, cancellation and errors while live output cont
   let rejectDownload;
   let calls = 0;
   const elements = {
+    ...usageElements(),
     output: { scrollHeight: 100 },
     follow: { checked: true, addEventListener() {} },
     status: {},
@@ -422,6 +553,7 @@ test('download UI handles saving, cancellation and errors while live output cont
     window: {
       addEventListener() {},
       mapleActivity: {
+        ...idleUsageBridge(),
         onChange: (callback) => { onChange = callback; return () => {}; },
         snapshot: async () => '',
         download: () => {
@@ -461,4 +593,76 @@ test('download UI handles saving, cancellation and errors while live output cont
   await pending;
   assert.match(elements['download-status'].textContent, /Unable to save activity log: Permission denied/);
   assert.equal(elements.download.disabled, false);
+});
+
+test('usage UI handles snapshot races, totals, partial costs, pending turns and unavailable data', async () => {
+  const elements = {
+    ...usageElements(),
+    output: {},
+    follow: { addEventListener() {} },
+    status: {},
+    download: { addEventListener() {} },
+    'download-status': {},
+  };
+  let onUsageChange;
+  let resolveUsage;
+  const context = vm.createContext({
+    document: { getElementById: (id) => elements[id] },
+    window: {
+      addEventListener() {},
+      mapleActivity: {
+        onChange: () => () => {},
+        snapshot: async () => '',
+        onUsageChange: (callback) => { onUsageChange = callback; return () => {}; },
+        usage: () => new Promise((resolve) => { resolveUsage = resolve; }),
+      },
+    },
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'activity.js'), 'utf8'), context);
+  const usage = {
+    sessionId: '<script>session</script>',
+    turns: 2,
+    totals: {
+      inputTokens: 100, outputTokens: 20, cacheReadTokens: 80, reasoningTokens: 5,
+      aiCredits: 1.25, aiCreditsStatus: 'partial', premiumRequests: 0,
+    },
+  };
+  onUsageChange(usage);
+  resolveUsage({ sessionId: 'stale', turns: 0, totals: null });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(elements['usage-total'].textContent, '120');
+  assert.equal(elements['usage-credits'].textContent, '1.25 (partial)');
+  assert.equal(elements['usage-requests'].textContent, '0');
+  assert.match(elements['usage-details'].textContent, /<script>session<\/script>/);
+  assert.match(elements['usage-details'].textContent, /Cache written: Unavailable/);
+  onUsageChange({ ...usage, updating: true });
+  assert.match(elements['usage-status'].textContent, /refresh when this reply finishes/);
+  onUsageChange({ ...usage, error: 'Report missing' });
+  assert.match(elements['usage-status'].textContent, /Report missing.*last successful report/);
+  onUsageChange({ ...usage, totals: { aiCredits: 0.000000001 } });
+  assert.equal(elements['usage-credits'].textContent, '<0.000001');
+  assert.equal(elements['usage-total'].textContent, 'Unavailable');
+  onUsageChange({ ...usage, totals: null });
+  assert.equal(elements['usage-credits'].textContent, 'Unavailable');
+});
+
+test('usage preload exposes only usage data and removes its event listener', async () => {
+  const ipc = new EventEmitter();
+  ipc.invoke = async (channel) => channel;
+  let bridge;
+  const context = vm.createContext({
+    require: () => ({
+      contextBridge: { exposeInMainWorld: (_name, api) => { bridge = api; } },
+      ipcRenderer: ipc,
+    }),
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'activity-preload.js'), 'utf8'), context);
+  assert.equal(await bridge.usage(), 'activity:usage');
+  const updates = [];
+  const unsubscribe = bridge.onUsageChange((...args) => updates.push(args));
+  const usage = { sessionId: 'session' };
+  ipc.emit('activity:usage-changed', { sender: 'private' }, usage);
+  assert.deepEqual(updates, [[usage]]);
+  unsubscribe();
+  assert.equal(ipc.listenerCount('activity:usage-changed'), 0);
 });
