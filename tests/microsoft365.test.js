@@ -87,6 +87,47 @@ test('validates tenant-specific public-client configuration and requests only en
   app.service.disconnect();
 });
 
+test('device sign-in ignores response URLs and defaults an omitted polling interval to five seconds', async () => {
+  for (const verificationUri of ['https://microsoft.com/devicelogin/',
+    'https://login.microsoftonline.com/common/oauth2/deviceauth',
+    'https://untrusted.invalid/private-value', undefined]) {
+    const app = setup();
+    const response = { ...device, verification_uri: verificationUri };
+    delete response.interval;
+    app.responses.push({ data: response });
+    await app.service.signIn(config);
+    assert.equal(app.service.state.verificationUrl, 'https://microsoft.com/devicelogin');
+    assert.equal(app.service.state.code, device.user_code);
+    assert.equal([...app.timers.values()][0].delay, 5000);
+    assert.doesNotMatch(JSON.stringify(app.states), /untrusted|private-value|private-device-code/);
+    app.responses.push({ data: token }, { data: { id: 'me' } },
+      { data: { value: [] } }, { data: { value: [] } });
+    await app.tick();
+    assert.equal(app.service.state.status, 'connected');
+    app.service.disconnect();
+  }
+});
+
+test('malformed device sign-in responses identify invalid fields without exposing their values', async () => {
+  for (const [field, value] of [
+    ['device_code', ''], ['user_code', ' '], ['expires_in', 0],
+    ['expires_in', 'private-value'], ['interval', null], ['interval', -1],
+    ['interval', 'private-value'],
+  ]) {
+    const app = setup();
+    app.responses.push({ data: { ...device, [field]: value } });
+    await assert.rejects(app.service.signIn(config), new RegExp(`invalid or missing: ${field}`));
+    assert.equal(app.service.state.status, 'error');
+    assert.equal(app.service.device, null);
+    assert.equal(app.timers.size, 0);
+    assert.doesNotMatch(JSON.stringify(app.states), /private-value|private-device-code|USERCODE/);
+  }
+  const app = setup();
+  app.responses.push({ data: null });
+  await assert.rejects(app.service.signIn(config), /expected an object/);
+  assert.equal(app.service.state.status, 'error');
+});
+
 test('device flow handles pending, slow down, approval, expiry, and denied consent without exposing secrets', async () => {
   const app = setup();
   app.responses.push({ data: device });

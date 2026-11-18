@@ -106,16 +106,24 @@ class Microsoft365 {
         client_id: config.clientId, scope: scopes.join(' '),
       });
       if (generation !== this.generation) return;
-      if (typeof device.device_code !== 'string' || typeof device.user_code !== 'string' ||
-          !Number.isFinite(device.expires_in) || device.expires_in <= 0 ||
-          !Number.isFinite(device.interval) || device.interval <= 0 ||
-          device.verification_uri !== 'https://microsoft.com/devicelogin') {
-        throw new Error('Microsoft returned an invalid device sign-in response.');
+      if (!device || typeof device !== 'object') {
+        throw new Error('Microsoft returned an invalid device sign-in response (expected an object).');
+      }
+      const interval = device.interval === undefined ? 5 : device.interval;
+      const invalidFields = [
+        ['device_code', typeof device.device_code === 'string' && device.device_code.trim().length > 0],
+        ['user_code', typeof device.user_code === 'string' && device.user_code.trim().length > 0],
+        ['expires_in', Number.isFinite(device.expires_in) && device.expires_in > 0],
+        ['interval', Number.isFinite(interval) && interval > 0],
+      ].filter(([, valid]) => !valid).map(([field]) => field);
+      if (invalidFields.length) {
+        throw new Error(`Microsoft returned an invalid device sign-in response (invalid or missing: ${invalidFields.join(', ')}).`);
       }
       this.device = device.device_code;
       this.deviceExpires = this.now() + device.expires_in * 1000;
-      this.interval = Math.max(5000, device.interval * 1000);
-      this.publish({ code: device.user_code, verificationUrl: device.verification_uri,
+      this.interval = Math.max(5000, interval * 1000);
+      // Use the same fixed Microsoft URL as the browser-opening IPC handler.
+      this.publish({ code: device.user_code, verificationUrl: 'https://microsoft.com/devicelogin',
         message: 'Open Microsoft sign-in, enter this code, and approve only your expected organization and app.' });
       this.timer = this.schedule(() => this.checkSignIn(generation), this.interval);
     } catch (error) {

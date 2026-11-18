@@ -82,3 +82,6 @@ to provide conversation context. It is not model training or a full chat log.
   Polls about once a minute; Teams uses latest-chat previews, not channels or
   guaranteed per-message delivery. Message text is not sent to GitHub Copilot.
   Credentials stay in memory; reconnect after restart.
+  Device sign-in uses a fixed Microsoft browser URL rather than trusting or
+  requiring an exact response URL, defaults an omitted polling interval to
+  five seconds, and names malformed fields without logging response values.
