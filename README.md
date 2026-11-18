@@ -32,6 +32,10 @@ files/folders/webpages for you, all within tightly scoped permissions.
   text file and see cumulative token usage, reported AI credits, and premium
   requests in the live activity window. See [Live activity](#live-activity)
   for details and limits.
+- **Optional Microsoft 365 notifications**: connect an organization-approved
+  app to receive generic Outlook Inbox and Teams chat alerts, with matching
+  Maple animations. Requires Microsoft sign-in and tenant permissions; see
+  [Microsoft 365 notifications](#microsoft-365-notifications).
 - **Self-editing**: Maple is granted `read`/`write` access scoped *only* to
   her own project folder, so she can patch her own source files when asked.
 - **Local Office creation**: ask Maple to make editable PowerPoint (`.pptx`),
@@ -58,7 +62,8 @@ files/folders/webpages for you, all within tightly scoped permissions.
 - **Click-through mode** (`Alt+Shift+C`) to let mouse clicks pass through her
   to whatever's underneath.
 - **System tray** menu: show/hide (`Alt+Shift+M`), reset position
-  (`Alt+Shift+R`), open live activity (`Alt+Shift+L`), toggle click-through, quit.
+  (`Alt+Shift+R`), open live activity (`Alt+Shift+L`), Microsoft 365 notifications,
+  toggle click-through, quit.
 - **Persistent memory**: Maple reads/writes `memory.md` in the project root
   to remember lasting preferences and ideas across conversations (see
   `AGENTS.md` for the rules she follows when doing so).
@@ -112,6 +117,55 @@ reported billing units are not dollar estimates or an invoice.
 This is not an interactive terminal. It cannot accept commands, expose private
 internal reasoning, or show information that GitHub Copilot does not emit.
 
+## Microsoft 365 notifications
+
+Open **Microsoft 365 notifications...** in Maple's tray menu. This optional
+connection uses Microsoft Graph directly, not GitHub Copilot, and supports
+work or school accounts in the Microsoft public cloud.
+
+An administrator or authorized developer must first register an approved
+**single-tenant** application in Microsoft Entra:
+
+1. In **Authentication**, enable **Allow public client flows** for device-code
+   sign-in. No client secret or redirect URI is required.
+2. Add **delegated** Microsoft Graph permissions: `User.Read`, `offline_access`,
+   `Mail.ReadBasic` for Outlook, and `Chat.ReadBasic` for Teams. Grant consent
+   as required by your organization. Only enable approved sources in Maple.
+3. Enter the **Application (client) ID** and **Directory (tenant) ID** in
+   Maple's connection window, choose sources, and click **Connect Microsoft 365**.
+4. Click **Open Microsoft sign-in**, enter the displayed code at
+   `https://microsoft.com/devicelogin`, and verify the app name and organization
+   before consenting. Never paste passwords, access tokens, or client secrets
+   into Maple's chat or source code.
+
+Organizations may block app registration, consent, or device-code sign-in.
+Maple cannot bypass those policies; use an administrator-approved integration
+instead if this flow is not allowed.
+
+After sign-in, Maple checks about once a minute while running and displays
+generic alerts on the mascot and through Windows notifications when available.
+Outlook checks only new Inbox arrivals, not other folders or shared mailboxes.
+Teams checks the latest incoming message in each chat, not channel posts;
+multiple messages may be grouped, and an incoming message can be missed if
+your own reply replaces its preview before the next check. Existing messages
+at sign-in are ignored. This is best-effort polling, not instant delivery or
+an unread counter; throttling and network failures can delay alerts. Connection
+and per-source errors are shown in the connection window.
+
+Email requests select only message IDs and received timestamps. Graph may
+return Teams preview text, but Maple discards it and retains IDs for
+deduplication only. Message text, sender names, and credentials are never sent
+to GitHub Copilot or the activity log by this integration. Tokens and message
+IDs stay in memory and are cleared on disconnect or restart; sign in again
+after restarting Maple. Only the non-secret app/tenant IDs and source choices
+are saved in `microsoft365-settings.json` in Electron's local user-data folder,
+not the repository. **Disconnect / cancel sign-in** stops monitoring and clears
+local credentials; it does not revoke the app's consent in Microsoft.
+
+Microsoft API references: [device-code sign-in](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code),
+[list messages](https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0),
+and [list chats](https://learn.microsoft.com/en-us/graph/api/chat-list?view=graph-rest-1.0).
+
 ## Packaging as a standalone .exe
 
 This project is wired up with [electron-builder](https://www.electron.build/)
@@ -139,6 +193,8 @@ src/
                         bridge (askCopilot).
   preload.js            contextBridge API exposed to the renderer.
   activity-preload.js   Read-only activity, log download, and usage bridge.
+  microsoft365.js       Device-code sign-in and generic Graph notification polling.
+  microsoft365-preload.js Connection-window-only settings bridge.
   mcp/
     actions-server.js   Narrowly scoped desktop-action MCP server.
     office-files.js     Local Office Open XML generation and creation tool.
@@ -150,6 +206,10 @@ src/
     activity.html          Live activity window and session usage markup.
     activity.js            Streamed output, log download, and usage display.
     activity.css           Live activity window styling.
+    microsoft365.html      Microsoft 365 connection and consent instructions.
+    microsoft365.js        Connection form and source status display.
+    microsoft365.css       Connection window styling.
+    notifications.js       Generic notification banner and alert reactions.
   assets/
     Maple-Animation-Pack/
       Maple-Animations/   Animated WebPs, APNG alternatives, and an HTML preview.
@@ -197,8 +257,9 @@ widening shell access.
 
 See `memory.md` for Maple's own running list of proposed-but-not-yet-built
 ideas (email/Teams notification integrations, a model picker in the tray menu,
-etc.). Email and Teams alert animation assets are included in the animation
-pack, but notification integrations are not implemented.
+etc.). Microsoft 365 notifications require a separately approved app registration
+and sign-in; there is no preconfigured tenant connection or guaranteed real-time
+delivery.
 
 ## License
 

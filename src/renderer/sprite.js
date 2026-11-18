@@ -26,6 +26,8 @@ const Sprite = (() => {
     confused: 'maple-head-tilt.webp',
     greeting: 'maple-wave.webp',
     ack: 'maple-ear-perk.webp',
+    email_alert: 'maple-email-alert.webp',
+    teams_alert: 'maple-teams-alert.webp',
   };
   const animationCache = new Map();
   let requestedSource = null;
@@ -55,6 +57,8 @@ const Sprite = (() => {
     goodbye: '21-goodbye.png',
     startled: '22-startled-dragged.png',
     ack: '23-quick-acknowledgement.png',
+    email_alert: '14-surprised.png',
+    teams_alert: '14-surprised.png',
   };
 
   // Idle sub-poses cycle automatically while resting. Weighted so the plain
@@ -88,6 +92,8 @@ const Sprite = (() => {
     goodbye: 2000,
     startled: 1200,
     ack: 900,
+    email_alert: 3200,
+    teams_alert: 3200,
   };
 
   let state = 'idle';

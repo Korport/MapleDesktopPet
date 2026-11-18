@@ -17,8 +17,6 @@ to provide conversation context. It is not model training or a full chat log.
 
 - Package Maple as a Windows desktop app that starts without a command prompt.
   Packaging approach is under discussion; not implemented.
-- Explore connecting Maple to email and Teams notifications so Maple can alert
-  the user to new messages. Proposed; not implemented.
 - Explore connecting Maple to the user's work Copilot/Work IQ context through
   an organization-approved integration. Feasibility and access are unverified;
   not implemented.
@@ -37,7 +35,8 @@ to provide conversation context. It is not model training or a full chat log.
   greeting, thinking, listening, and reaction states at 1.5x playback speed.
   States without matching animations retain their PNG poses.
 - The user is planning animation assets and wants a broad set of Maple reactions,
-  including email and Teams alerts. Asset names and animation wiring are proposed.
+  including email and Teams alerts. Notification reactions are now wired to
+  the supplied email/Teams animations; more reactions remain proposed.
 - The user wants Maple to eventually act as a desktop frontend for their own
   internal Copilot "Autopilot" (an org-internal autonomous Copilot agent),
   once/if that Autopilot exposes MCP access. The idea: keep Maple's existing
@@ -75,3 +74,11 @@ to provide conversation context. It is not model training or a full chat log.
   requests. Totals refresh after each reply using GitHub Copilot's usage export,
   include subagents, and reset when Maple restarts. Missing/partial usage is
   labeled; billing units are not dollar estimates or an invoice. Implemented.
+- The user approved privacy-first Outlook and Teams notifications. Maple now
+  has a tray connection screen using tenant-specific Microsoft device sign-in,
+  with generic Inbox email and Teams chat alerts and matching animations.
+  Requires an organization-approved Entra public-client app and user sign-in;
+  no account is preconnected and live tenant access is unverified.
+  Polls about once a minute; Teams uses latest-chat previews, not channels or
+  guaranteed per-message delivery. Message text is not sent to GitHub Copilot.
+  Credentials stay in memory; reconnect after restart.

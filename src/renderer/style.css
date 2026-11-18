@@ -143,6 +143,28 @@ html, body {
   padding-top: 6px;
 }
 
+#notification {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #d59a50;
+  border-radius: 8px;
+  color: #fff1d9;
+  background: rgba(45, 31, 20, 0.95);
+  font-size: 12px;
+}
+#notification.hidden { display: none; }
+#notification-text { flex: 1; }
+#notification-dismiss {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+}
+
 #chat-input {
   flex: 1;
   border: none;

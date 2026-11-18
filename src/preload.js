@@ -9,5 +9,10 @@ contextBridge.exposeInMainWorld('mascot', {
     ipcRenderer.on('mascot:progress', listener);
     return () => ipcRenderer.removeListener('mascot:progress', listener);
   },
+  onNotification: (callback) => {
+    const listener = (_event, notification) => callback(notification);
+    ipcRenderer.on('mascot:notification', listener);
+    return () => ipcRenderer.removeListener('mascot:notification', listener);
+  },
   resizeContent: (height) => ipcRenderer.send('mascot:resize-content', height),
 });

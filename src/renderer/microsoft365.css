@@ -1,0 +1,17 @@
+:root { color-scheme: dark; font-family: "Segoe UI", sans-serif; background: #171b22; color: #eee5da; }
+body { margin: 0; }
+main { max-width: 720px; margin: auto; padding: 24px; }
+h1 { color: #f1b878; font-size: 24px; }
+h2 { font-size: 18px; }
+p { line-height: 1.5; }
+details, section { background: #222830; border: 1px solid #48505c; border-radius: 10px; padding: 16px; margin: 18px 0; }
+summary { cursor: pointer; color: #f1b878; }
+label { display: block; margin: 14px 0; }
+input:not([type="checkbox"]) { display: block; box-sizing: border-box; width: 100%; margin-top: 6px; padding: 10px; background: #222830; color: inherit; border: 1px solid #657080; border-radius: 5px; }
+.check { display: flex; gap: 8px; align-items: center; }
+.buttons { display: flex; gap: 12px; flex-wrap: wrap; }
+button { padding: 10px 14px; border: 1px solid #c39565; border-radius: 6px; background: #513c28; color: inherit; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+.note { font-size: 13px; color: #c1c6ce; }
+#code { font-size: 22px; letter-spacing: 3px; color: #f1b878; }
+#error { color: #ffb4a2; }

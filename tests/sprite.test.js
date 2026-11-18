@@ -111,6 +111,8 @@ test('plays the supplied animation pack for matching states', async () => {
     celebrating: 'maple-happy.webp',
     confused: 'maple-head-tilt.webp',
     ack: 'maple-ear-perk.webp',
+    email_alert: 'maple-email-alert.webp',
+    teams_alert: 'maple-teams-alert.webp',
   };
   for (const [state, filename] of Object.entries(states)) {
     const app = setup(async source => {

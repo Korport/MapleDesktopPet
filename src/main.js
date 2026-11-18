@@ -1,8 +1,9 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, dialog, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { Microsoft365, validateConfig } = require(path.join(__dirname, 'microsoft365'));
 
 app.setName('Maple');
 
@@ -12,6 +13,79 @@ let clickThrough = false;
 let activityWin = null;
 let activityText = '';
 const MAX_ACTIVITY_LENGTH = 200000;
+let microsoft365Win = null;
+let microsoft365 = null;
+let microsoft365Config = null;
+const desktopAlerts = new Set();
+
+function ensureMicrosoft365() {
+  if (microsoft365) return microsoft365;
+  microsoft365 = new Microsoft365({
+    onState: (state) => {
+      if (microsoft365Win && !microsoft365Win.isDestroyed()) {
+        microsoft365Win.webContents.send('microsoft365:changed', state);
+      }
+    },
+    onAlert: ({ source, count }) => {
+      const text = source === 'email'
+        ? `${count} new email${count === 1 ? '' : 's'} in your Outlook Inbox.`
+        : `New Teams messages in ${count} chat${count === 1 ? '' : 's'}.`;
+      if (win && !win.isDestroyed()) win.webContents.send('mascot:notification', { source, text });
+      if (Notification.isSupported()) {
+        const notification = new Notification({ title: 'Maple', body: text });
+        desktopAlerts.add(notification);
+        notification.on('close', () => desktopAlerts.delete(notification));
+        notification.on('click', () => { if (win) win.show(); });
+        notification.on('failed', () => {
+          desktopAlerts.delete(notification);
+          microsoft365.publish({ message: 'Connected, but a Windows notification could not be displayed. Check Maple and Windows notification settings.' });
+        });
+        notification.show();
+        if (desktopAlerts.size > 10) {
+          const oldest = desktopAlerts.values().next().value;
+          oldest.close();
+          desktopAlerts.delete(oldest);
+        }
+      }
+    },
+  });
+  try {
+    microsoft365Config = validateConfig(JSON.parse(fs.readFileSync(
+      path.join(app.getPath('userData'), 'microsoft365-settings.json'), 'utf8')));
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      microsoft365.publish({ status: 'error', message: 'Unable to load Microsoft 365 settings. Re-enter your app IDs and source choices to reconnect.' });
+    }
+  }
+  return microsoft365;
+}
+
+function showMicrosoft365() {
+  ensureMicrosoft365();
+  if (microsoft365Win && !microsoft365Win.isDestroyed()) {
+    if (microsoft365Win.isMinimized()) microsoft365Win.restore();
+    microsoft365Win.show();
+    microsoft365Win.focus();
+    return;
+  }
+  microsoft365Win = new BrowserWindow({
+    title: 'Maple - Microsoft 365 notifications',
+    width: 760,
+    height: 800,
+    minWidth: 420,
+    minHeight: 400,
+    backgroundColor: '#171b22',
+    webPreferences: {
+      preload: path.join(__dirname, 'microsoft365-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  microsoft365Win.setMenuBarVisibility(false);
+  microsoft365Win.loadFile(path.join(__dirname, 'renderer', 'microsoft365.html'));
+  microsoft365Win.on('closed', () => { microsoft365Win = null; });
+}
 
 function appendActivity(text) {
   activityText = (activityText + text).slice(-MAX_ACTIVITY_LENGTH);
@@ -397,6 +471,10 @@ function createTray() {
       click: () => showActivity(),
     },
     {
+      label: 'Microsoft 365 notifications...',
+      click: () => showMicrosoft365(),
+    },
+    {
       label: 'Click-through mode',
       type: 'checkbox',
       checked: clickThrough,
@@ -540,7 +618,50 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
+  microsoft365?.disconnect();
   globalShortcut.unregisterAll();
+});
+
+function requireMicrosoft365Window(event) {
+  if (!microsoft365Win || event.sender !== microsoft365Win.webContents ||
+      event.senderFrame !== microsoft365Win.webContents.mainFrame) {
+    throw new Error('Microsoft 365 settings are only available in the Maple connection window.');
+  }
+}
+
+ipcMain.handle('microsoft365:snapshot', (event) => {
+  requireMicrosoft365Window(event);
+  return { state: ensureMicrosoft365().state, config: microsoft365Config };
+});
+
+ipcMain.handle('microsoft365:sign-in', async (event, input) => {
+  requireMicrosoft365Window(event);
+  const service = ensureMicrosoft365();
+  if (service.state.status === 'signing-in' || service.state.status === 'connected') {
+    throw new Error('Disconnect or cancel the current sign-in before connecting again.');
+  }
+  const config = validateConfig(input);
+  const directory = app.getPath('userData');
+  await fs.promises.mkdir(directory, { recursive: true });
+  await fs.promises.writeFile(path.join(directory, 'microsoft365-settings.json'), JSON.stringify(config), 'utf8');
+  microsoft365Config = config;
+  await service.signIn(config);
+});
+
+ipcMain.handle('microsoft365:disconnect', (event) => {
+  requireMicrosoft365Window(event);
+  ensureMicrosoft365().disconnect();
+  if (win && !win.isDestroyed()) win.webContents.send('mascot:notification', null);
+  for (const notification of desktopAlerts) notification.close();
+  desktopAlerts.clear();
+});
+
+ipcMain.handle('microsoft365:open-sign-in', async (event) => {
+  requireMicrosoft365Window(event);
+  if (ensureMicrosoft365().state.status !== 'signing-in' || !microsoft365.state.code) {
+    throw new Error('Start a Microsoft 365 connection first.');
+  }
+  await shell.openExternal('https://microsoft.com/devicelogin');
 });
 
 // IPC: renderer asks to drag the window (since it's frameless)

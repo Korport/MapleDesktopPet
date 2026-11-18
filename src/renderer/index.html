@@ -28,6 +28,11 @@
       <img id="sprite" src="../assets/Maple-Animation-Pack/Maple-Animations/maple-idle.webp" alt="Maple, an autumn fox companion" draggable="false" />
     </div>
 
+    <div id="notification" class="no-drag hidden" role="status" aria-live="polite">
+      <span id="notification-text"></span>
+      <button id="notification-dismiss" title="Dismiss notification" aria-label="Dismiss notification">x</button>
+    </div>
+
     <form id="chat-form" class="no-drag">
       <input id="chat-input" type="text" placeholder="Talk to Maple…" autocomplete="off" />
       <button type="submit">➤</button>
@@ -36,5 +41,6 @@
 
   <script src="sprite.js"></script>
   <script src="renderer.js"></script>
+  <script src="notifications.js"></script>
 </body>
 </html>
