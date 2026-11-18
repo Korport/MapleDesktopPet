@@ -65,6 +65,141 @@ function writeEvent(app, type, data, extra = {}) {
   app.child.stdout.write(JSON.stringify({ type, data, ...extra }) + '\n');
 }
 
+test('streams bounded thinking summaries, commentary and tool progress separately from the reply', async () => {
+  const app = setup();
+  const progress = [];
+  const reply = app.askCopilot('Work', (update) => progress.push(update));
+  writeEvent(app, 'assistant.reasoning_delta', { reasoningId: 'r1', deltaContent: 'Checking' });
+  writeEvent(app, 'assistant.reasoning_delta', { reasoningId: 'r1', deltaContent: ' ' });
+  writeEvent(app, 'assistant.reasoning_delta', { reasoningId: 'r1', deltaContent: 'the files' });
+  assert.equal(progress.at(-1).label, 'Thinking');
+  assert.equal(progress.at(-1).text, 'Checking the files');
+  writeEvent(app, 'assistant.reasoning', { content: 'Checking the files.' });
+  assert.equal(progress.at(-1).text, 'Checking the files.');
+  writeEvent(app, 'assistant.reasoning_delta', { reasoningId: 'r2', deltaContent: 'Next step' });
+  assert.equal(progress.at(-1).text, 'Next step');
+  writeEvent(app, 'tool.execution_start', { toolName: 'view' });
+  assert.equal(progress.at(-1).text, 'Running view...');
+  writeEvent(app, 'tool.execution_progress', { progressMessage: 'Reading the renderer' });
+  assert.equal(progress.at(-1).text, 'Reading the renderer');
+  writeEvent(app, 'tool.execution_complete', { success: false, error: { message: 'Access denied' } });
+  assert.equal(progress.at(-1).text, 'Tool failed: Access denied');
+  writeEvent(app, 'tool.execution_complete', { success: true });
+  assert.equal(progress.at(-1).text, 'Tool finished. Continuing...');
+  const count = progress.length;
+  writeEvent(app, 'assistant.reasoning', { content: 'Nested' }, { agentId: 'agent-1' });
+  writeEvent(app, 'assistant.message', { parentToolCallId: 't1', content: 'Nested' });
+  writeEvent(app, 'assistant.reasoning_delta', {});
+  assert.equal(progress.length, count);
+  writeEvent(app, 'assistant.message_delta', { messageId: 'm1', deltaContent: 'x'.repeat(2000) });
+  assert.equal(progress.at(-1).text.length, 1800);
+  writeEvent(app, 'assistant.message_delta', { messageId: 'm2', deltaContent: 'New message' });
+  assert.equal(progress.at(-1).text, 'New message');
+  writeEvent(app, 'assistant.message', { content: 'Done' });
+  app.child.emit('close', 0);
+  assert.equal(await reply, 'Done');
+});
+
+test('preload forwards progress data without exposing IPC events and unsubscribes', () => {
+  const ipc = new EventEmitter();
+  let bridge;
+  const context = vm.createContext({
+    require: () => ({
+      contextBridge: { exposeInMainWorld: (_name, api) => { bridge = api; } },
+      ipcRenderer: ipc,
+    }),
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8'), context);
+  const updates = [];
+  const unsubscribe = bridge.onProgress((...args) => updates.push(args));
+  const update = { label: 'Thinking', text: 'Checking files' };
+  ipc.emit('mascot:progress', { sender: 'private' }, update);
+  assert.deepEqual(updates, [[update]]);
+  unsubscribe();
+  assert.equal(ipc.listenerCount('mascot:progress'), 0);
+});
+
+test('thinking bubble updates safely, blocks overlapping prompts and yields to final replies or errors', async () => {
+  for (const failed of [false, true]) {
+    const elements = new Map();
+    function element(id) {
+      if (!elements.has(id)) {
+        const classes = new Set(['hidden']);
+        elements.set(id, {
+          value: '', style: {}, events: {}, scrollHeight: 200,
+          classList: {
+            add: (name) => classes.add(name),
+            remove: (name) => classes.delete(name),
+            contains: (name) => classes.has(name),
+          },
+          addEventListener(name, callback) { this.events[name] = callback; },
+          setAttribute(name, value) { this[name] = value; },
+          querySelector: () => element('submit'),
+        });
+      }
+      return elements.get(id);
+    }
+    let onProgress;
+    let finish;
+    let calls = 0;
+    const frames = [];
+    const states = [];
+    const context = vm.createContext({
+      document: { getElementById: element },
+      window: {
+        addEventListener() {},
+        mascot: {
+          onProgress: (callback) => { onProgress = callback; return () => {}; },
+          askCopilot: () => {
+            calls++;
+            return new Promise((resolve, reject) => {
+              finish = () => failed ? reject(new Error('Connection lost')) : resolve('All done');
+            });
+          },
+        },
+      },
+      Sprite: { start() {}, setState: (state) => states.push(state), setAmplitude() {} },
+      ResizeObserver: class { observe() {} },
+      performance: { now: () => 0 },
+      requestAnimationFrame: (callback) => frames.push(callback),
+    });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.js'), 'utf8'), context);
+    const submit = () => element('chat-form').events.submit({ preventDefault() {} });
+    element('chat-input').value = 'First task';
+    submit();
+    assert.equal(element('thinking-bubble').classList.contains('hidden'), false);
+    assert.match(element('thinking-text').textContent, /Connecting/);
+    assert.equal(element('bubble').classList.contains('hidden'), true);
+    assert.equal(element('submit').disabled, true);
+    onProgress({ label: 'Thinking', text: '<script>plain text</script>' });
+    assert.equal(element('thinking-text').textContent, '<script>plain text</script>');
+    assert.equal(element('thinking-text').scrollTop, 200);
+    element('chat-input').value = 'Queued draft';
+    submit();
+    assert.equal(calls, 1);
+    assert.equal(element('chat-input').value, 'Queued draft');
+    finish();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(element('thinking-bubble').classList.contains('hidden'), true);
+    assert.equal(element('bubble-text').textContent, failed
+      ? 'Error talking to Copilot: Connection lost' : 'All done');
+    onProgress({ label: 'Working', text: 'Late event' });
+    assert.equal(element('thinking-text').textContent, '<script>plain text</script>');
+    frames.shift()(5000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(element('submit').disabled, false);
+    assert.equal(element('chat-form')['aria-busy'], 'false');
+    assert.equal(states.at(-1), failed ? 'confused' : 'happy');
+    submit();
+    assert.equal(calls, 2);
+    assert.match(element('thinking-text').textContent, /Connecting/);
+    finish();
+    await new Promise((resolve) => setImmediate(resolve));
+    frames.shift()(5000);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
 test('streams CLI events and diagnostics live while returning only the final reply', async () => {
   const app = setup();
   app.showActivity();

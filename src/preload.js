@@ -4,5 +4,10 @@ contextBridge.exposeInMainWorld('mascot', {
   dragMove: (dx, dy) => ipcRenderer.send('mascot:drag-move', { dx, dy }),
   setClickThrough: (enabled) => ipcRenderer.send('mascot:set-click-through', enabled),
   askCopilot: (message) => ipcRenderer.invoke('mascot:ask-copilot', message),
+  onProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on('mascot:progress', listener);
+    return () => ipcRenderer.removeListener('mascot:progress', listener);
+  },
   resizeContent: (height) => ipcRenderer.send('mascot:resize-content', height),
 });

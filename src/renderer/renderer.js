@@ -9,8 +9,22 @@ const bubbleClose = document.getElementById('bubble-close');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const clickThroughBtn = document.getElementById('click-through-btn');
+const thinkingBubble = document.getElementById('thinking-bubble');
+const thinkingLabel = document.getElementById('thinking-label');
+const thinkingText = document.getElementById('thinking-text');
+const submitButton = chatForm.querySelector('button[type="submit"]');
 
 let clickThroughEnabled = false;
+let busy = false;
+let thinking = false;
+
+const stopProgress = window.mascot.onProgress(({ label, text }) => {
+  if (!thinking) return;
+  thinkingLabel.textContent = label;
+  thinkingText.textContent = text;
+  thinkingText.scrollTop = thinkingText.scrollHeight;
+});
+window.addEventListener('beforeunload', stopProgress);
 
 function showBubble(text) {
   bubbleText.textContent = text;
@@ -28,6 +42,15 @@ bubbleClose.addEventListener('click', () => hideBubble());
 // Thinking -> talking while the reply streams in, then a reaction pose
 // picked from the reply content before settling back to idle.
 async function askBrain(message) {
+  if (busy) return;
+  busy = true;
+  thinking = true;
+  submitButton.disabled = true;
+  chatForm.setAttribute('aria-busy', 'true');
+  hideBubble();
+  thinkingLabel.textContent = 'Thinking';
+  thinkingText.textContent = 'Connecting to GitHub Copilot...';
+  thinkingBubble.classList.remove('hidden');
   Sprite.setState('thinking');
 
   let reply;
@@ -40,12 +63,17 @@ async function askBrain(message) {
     failed = true;
   }
 
+  thinking = false;
+  thinkingBubble.classList.add('hidden');
   Sprite.setState('talking');
   const durationMs = Math.min(4000, 900 + reply.length * 35);
   showBubble(reply);
   await animateTalking(durationMs);
 
   Sprite.setState(pickReaction(reply, failed));
+  busy = false;
+  submitButton.disabled = false;
+  chatForm.setAttribute('aria-busy', 'false');
 }
 
 // Lightweight keyword heuristic to pick a reaction pose for the reply —
@@ -87,7 +115,7 @@ function animateTalking(durationMs) {
 chatForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();
-  if (!text) return;
+  if (!text || busy) return;
   chatInput.value = '';
   askBrain(text);
 });

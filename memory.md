@@ -66,3 +66,7 @@ to provide conversation context. It is not model training or a full chat log.
 - Live activity has a Download activity log button for saving the current
   in-memory output as a UTF-8 text file through a Save dialog. Logs are not
   saved automatically or restored across restarts, as the user prefers.
+- While Maple works, a compact scrolling text bubble above her head shows
+  streamed progress, tool status, and reasoning summaries when emitted by
+  GitHub Copilot. It is replaced by the final reply on completion or error.
+  It does not expose private internal reasoning. Implemented.

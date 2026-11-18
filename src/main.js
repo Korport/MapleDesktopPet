@@ -144,7 +144,7 @@ function ensureFolderTrusted() {
 const copilotSessionId = crypto.randomUUID();
 let copilotSessionStarted = false;
 
-function askCopilot(message) {
+function askCopilot(message, onProgress = () => {}) {
   return new Promise((resolve, reject) => {
     ensureFolderTrusted();
     const configPath = ensureMcpConfig();
@@ -192,6 +192,14 @@ function askCopilot(message) {
     let finalReply = null;
     let outputError = null;
     let stderr = '';
+    let progressStream = '';
+    let progressText = '';
+    function reportProgress(label, text, stream = '') {
+      if (typeof text !== 'string' || (!stream && !text.trim())) return;
+      progressText = (stream && progressStream === stream ? progressText + text : text).slice(-1800);
+      progressStream = stream;
+      onProgress({ label, text: progressText });
+    }
     function consumeLine(line) {
       if (!line.trim()) return;
       let event;
@@ -212,6 +220,25 @@ function askCopilot(message) {
         appendActivity(data.deltaContent);
       } else {
         appendActivity(`\n[${event.type}]\n${JSON.stringify(event, null, 2)}\n`);
+      }
+      if (!event.agentId && !data?.parentToolCallId) {
+        if (event.type === 'assistant.reasoning_delta') {
+          reportProgress('Thinking', data?.deltaContent, `reasoning:${data?.reasoningId || ''}`);
+        } else if (event.type === 'assistant.reasoning') {
+          reportProgress('Thinking', data?.content);
+        } else if (event.type === 'assistant.message_delta') {
+          reportProgress('Working', data?.deltaContent, `message:${data?.messageId || ''}`);
+        } else if (event.type === 'assistant.message') {
+          reportProgress('Working', data?.content);
+        } else if (event.type === 'tool.execution_start') {
+          reportProgress('Using a tool', `Running ${data?.toolName || 'tool'}...`);
+        } else if (event.type === 'tool.execution_progress') {
+          reportProgress('Working', data?.progressMessage);
+        } else if (event.type === 'tool.execution_complete') {
+          reportProgress('Working', data?.success === false
+            ? `Tool failed${data?.error?.message ? `: ${data.error.message}` : '.'}`
+            : 'Tool finished. Continuing...');
+        }
       }
       if (event.type === 'assistant.message' && !event.agentId &&
           !data?.parentToolCallId && typeof data?.content === 'string') {
@@ -464,8 +491,10 @@ ipcMain.on('mascot:set-click-through', (_event, enabled) => {
   setClickThrough(enabled);
 });
 
-ipcMain.handle('mascot:ask-copilot', async (_event, message) => {
-  const reply = await askCopilot(message);
+ipcMain.handle('mascot:ask-copilot', async (event, message) => {
+  const reply = await askCopilot(message, (progress) => {
+    if (!event.sender.isDestroyed()) event.sender.send('mascot:progress', progress);
+  });
   checkRestartRequested();
   return reply;
 });
