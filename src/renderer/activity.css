@@ -10,6 +10,19 @@ h1 { margin: 0; font-size: 20px; color: #ffba78; }
 p { color: #bac5cf; font-size: 13px; max-width: 760px; }
 label, #status { font-size: 13px; }
 #status { margin-left: 20px; color: #bac5cf; }
+.download-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+button {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 12px;
+  border: 1px solid #ffba78;
+  border-radius: 6px;
+  background: #282f39;
+  color: #ffba78;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+#download-status { font-size: 13px; overflow-wrap: anywhere; }
 pre {
   flex: 1;
   min-height: 0;

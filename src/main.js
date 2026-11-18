@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, screen, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -166,7 +166,7 @@ function askCopilot(message) {
       "user you're restarting to apply it. If any of these tools report nothing to do, or an error, tell the user " +
       'exactly what they said. ' +
       `The user says: ${message}`;
-    const args = ['-p', prompt, '-s', '--no-color', '--stream', 'on'];
+    const args = ['-p', prompt, '--output-format', 'json', '--no-color', '--stream', 'on'];
     args.push(copilotSessionStarted ? `--resume=${copilotSessionId}` : `--session-id=${copilotSessionId}`);
     copilotSessionStarted = true;
     args.push(
@@ -188,13 +188,48 @@ function askCopilot(message) {
       ? spawn(['copilot.cmd', ...args].map(quote).join(' '), { shell: true, windowsHide: true, cwd: PROJECT_DIR })
       : spawn('copilot', args, { windowsHide: true, cwd: PROJECT_DIR });
 
-    let stdout = '';
+    let pendingOutput = '';
+    let finalReply = null;
+    let outputError = null;
     let stderr = '';
+    function consumeLine(line) {
+      if (!line.trim()) return;
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch (error) {
+        outputError = new Error(`Unable to read Copilot activity: ${error.message}`);
+        appendActivity(`\n[${outputError.message}]\n${line}\n`);
+        return;
+      }
+      if (!event || typeof event.type !== 'string') {
+        outputError = new Error('Unable to read Copilot activity: event has no type.');
+        appendActivity(`\n[${outputError.message}]\n${line}\n`);
+        return;
+      }
+      const data = event.data;
+      if (event.type === 'assistant.message_delta' && typeof data?.deltaContent === 'string') {
+        appendActivity(data.deltaContent);
+      } else {
+        appendActivity(`\n[${event.type}]\n${JSON.stringify(event, null, 2)}\n`);
+      }
+      if (event.type === 'assistant.message' && !event.agentId &&
+          !data?.parentToolCallId && typeof data?.content === 'string') {
+        finalReply = data.content;
+      }
+      if (event.type === 'result' && typeof event.exitCode === 'number' && event.exitCode !== 0) {
+        outputError = new Error(`Copilot reported exit code ${event.exitCode}.`);
+      }
+    }
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (d) => {
-      stdout += d;
-      appendActivity(d);
+      pendingOutput += d;
+      let newline;
+      while ((newline = pendingOutput.indexOf('\n')) !== -1) {
+        consumeLine(pendingOutput.slice(0, newline));
+        pendingOutput = pendingOutput.slice(newline + 1);
+      }
     });
     child.stderr.on('data', (d) => {
       stderr += d;
@@ -206,11 +241,17 @@ function askCopilot(message) {
       reject(err);
     });
     child.on('close', (code) => {
-      appendActivity(`\n[${code === 0 ? 'Finished' : `Process exited: ${code}`}]\n`);
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
+      consumeLine(pendingOutput);
+      if (code !== 0) {
+        appendActivity(`\n[Process exited: ${code}]\n`);
         reject(new Error(stderr.trim() || `copilot exited with code ${code}`));
+      } else if (outputError || finalReply === null) {
+        const error = outputError || new Error('Copilot finished without a final assistant message.');
+        appendActivity(`\n[Failed: ${error.message}]\n`);
+        reject(error);
+      } else {
+        appendActivity('\n[Finished]\n');
+        resolve(finalReply.trim());
       }
     });
   });
@@ -438,4 +479,21 @@ ipcMain.handle('activity:snapshot', (event) => {
     throw new Error('Activity is only available in the Maple activity window.');
   }
   return activityText;
+});
+
+ipcMain.handle('activity:download', async (event) => {
+  if (!activityWin || event.sender !== activityWin.webContents) {
+    throw new Error('Activity is only available in the Maple activity window.');
+  }
+  const text = activityText;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const { canceled, filePath } = await dialog.showSaveDialog(activityWin, {
+    title: 'Download Maple activity log',
+    defaultPath: path.join(app.getPath('downloads'), `Maple-activity-${timestamp}.txt`),
+    filters: [{ name: 'Text logs', extensions: ['txt'] }],
+  });
+  if (canceled) return { canceled: true };
+  if (!filePath) throw new Error('No destination was selected for the activity log.');
+  await fs.promises.writeFile(filePath, text, 'utf8');
+  return { canceled: false, filePath };
 });

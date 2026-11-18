@@ -10,6 +10,8 @@ to provide conversation context. It is not model training or a full chat log.
 - The user wants Maple to remember useful preferences and ideas across conversations.
 - The user wants visually polished documents and presentations with modern,
   varied styles, rather than plain title-and-bullet layouts.
+- The user wants terminal-like detail in Maple's live activity, including
+  tool calls, results, progress, and exposed reasoning summaries.
 
 ## Ideas for later
 
@@ -56,6 +58,11 @@ to provide conversation context. It is not model training or a full chat log.
   and tables, and spreadsheet values. Existing-file editing, images, charts,
   templates, and work-data integrations are not implemented.
 - Maple has a read-only live activity window, opened from the tray menu or
-  Alt+Shift+L, for watching emitted GitHub Copilot output during long tasks.
-  Recent output is bounded and held in memory; this is not an interactive
-  terminal or a full tool trace, and tools may run without emitting output.
+  Alt+Shift+L. It streams GitHub Copilot JSONL events, including tool calls,
+  results, progress, diagnostics, and any exposed reasoning summaries, while
+  keeping only the final assistant message in chat. Recent output is bounded
+  and held in memory; it is not an interactive terminal, cannot expose private
+  internal reasoning, and cannot show output that the CLI does not emit.
+- Live activity has a Download activity log button for saving the current
+  in-memory output as a UTF-8 text file through a Save dialog. Logs are not
+  saved automatically or restored across restarts, as the user prefers.

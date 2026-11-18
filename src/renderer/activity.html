@@ -10,10 +10,18 @@
 <body>
   <header>
     <h1>Maple live activity</h1>
-    <p>Read-only output from GitHub Copilot, not an interactive terminal.
-      Output may pause while tools run; this view does not expose private reasoning.</p>
+    <p>Live GitHub Copilot events: reply text, tool calls and results, progress,
+      errors, and any exposed reasoning summaries. Read-only, not an interactive
+      terminal; private internal reasoning is unavailable. Quiet tools may pause output.</p>
     <label><input id="follow" type="checkbox" checked> Follow latest output</label>
     <span id="status" role="status">Connecting...</span>
+    <div class="download-controls">
+      <button id="download" type="button" disabled>Download activity log</button>
+      <span id="download-status" role="status"></span>
+    </div>
+    <p>Downloads include only the recent output still in memory, not earlier trimmed
+      activity. Logs may contain conversation and tool data; review before sharing.
+      Nothing is saved automatically or restored after restarting Maple.</p>
   </header>
   <pre id="output" tabindex="0" aria-label="Live activity output"></pre>
   <script src="activity.js"></script>
