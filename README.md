@@ -23,6 +23,15 @@ files/folders/webpages for you, all within tightly scoped permissions.
   from the Copilot CLI's reply.
 - **Powered by GitHub Copilot CLI** (`copilot` on your PATH) — each chat
   session keeps conversational context via `--resume`.
+- **Live activity window** (`Alt+Shift+L` or the tray menu) shows streamed
+  GitHub Copilot tool calls, results, progress, diagnostics, and reasoning
+  summaries when emitted, while chat shows only the final reply.
+- **Live progress bubble** above Maple shows scrolling progress and tool
+  status while she works, then gives way to the final reply.
+- **Activity log download and session usage**: save recent activity as a
+  text file and see cumulative token usage, reported AI credits, and premium
+  requests in the live activity window. See [Live activity](#live-activity)
+  for details and limits.
 - **Self-editing**: Maple is granted `read`/`write` access scoped *only* to
   her own project folder, so she can patch her own source files when asked.
 - **Local Office creation**: ask Maple to make editable PowerPoint (`.pptx`),
@@ -49,7 +58,7 @@ files/folders/webpages for you, all within tightly scoped permissions.
 - **Click-through mode** (`Alt+Shift+C`) to let mouse clicks pass through her
   to whatever's underneath.
 - **System tray** menu: show/hide (`Alt+Shift+M`), reset position
-  (`Alt+Shift+R`), toggle click-through, quit.
+  (`Alt+Shift+R`), open live activity (`Alt+Shift+L`), toggle click-through, quit.
 - **Persistent memory**: Maple reads/writes `memory.md` in the project root
   to remember lasting preferences and ideas across conversations (see
   `AGENTS.md` for the rules she follows when doing so).
@@ -79,6 +88,30 @@ npm start
 Or just double-click `Start Autumn Sakura.bat`, which launches the app with
 no visible console window.
 
+## Live activity
+
+Open **Open live activity** from Maple's system tray menu, or press
+**Alt+Shift+L**, to watch GitHub Copilot work. The read-only window displays
+streamed tool calls and results, progress, diagnostics, and reasoning summaries
+when the CLI emits them. **Follow latest output** keeps the view scrolled to the latest
+activity. Maple also shows compact scrolling progress above her head while
+working; the final reply replaces that bubble when the request finishes.
+
+Click **Download activity log** to save a snapshot of the currently retained
+output as a UTF-8 text file using a Save dialog. Recent output is bounded and
+held in memory only: logs are not saved automatically or restored after a
+restart. Review logs before sharing, since they can contain your prompts and
+tool output.
+
+The window also shows cumulative usage for the current Maple session:
+input/output tokens, cache reads and writes, reasoning tokens, and reported
+AI credits and premium requests. Totals refresh after each reply, include
+subagents, and reset when Maple restarts. Missing or partial usage is labeled;
+reported billing units are not dollar estimates or an invoice.
+
+This is not an interactive terminal. It cannot accept commands, expose private
+internal reasoning, or show information that GitHub Copilot does not emit.
+
 ## Packaging as a standalone .exe
 
 This project is wired up with [electron-builder](https://www.electron.build/)
@@ -105,6 +138,7 @@ src/
                         position clamping/resizing, and the Copilot CLI
                         bridge (askCopilot).
   preload.js            contextBridge API exposed to the renderer.
+  activity-preload.js   Read-only activity, log download, and usage bridge.
   mcp/
     actions-server.js   Narrowly scoped desktop-action MCP server.
     office-files.js     Local Office Open XML generation and creation tool.
@@ -113,6 +147,9 @@ src/
     renderer.js           Chat wiring, Copilot bridge calls, reaction picking.
     sprite.js             Animated WebP playback and PNG pose state machine.
     style.css              Styling for the transparent window, bubble, chat input.
+    activity.html          Live activity window and session usage markup.
+    activity.js            Streamed output, log download, and usage display.
+    activity.css           Live activity window styling.
   assets/
     Maple-Animation-Pack/
       Maple-Animations/   Animated WebPs, APNG alternatives, and an HTML preview.
