@@ -8,6 +8,8 @@ to provide conversation context. It is not model training or a full chat log.
 
 - The user likes Sol and wants to leave Maple's model setup unchanged for now.
 - The user wants Maple to remember useful preferences and ideas across conversations.
+- The user wants visually polished documents and presentations with modern,
+  varied styles, rather than plain title-and-bullet layouts.
 
 ## Ideas for later
 
@@ -19,9 +21,16 @@ to provide conversation context. It is not model training or a full chat log.
   an organization-approved integration. Feasibility and access are unverified;
   not implemented.
 - Explore connecting Maple to Microsoft Copilot Cowork to create PowerPoint
-  presentations and Word documents. Proposed; direct invocation support and
-  organization-approved access remain unverified. Not implemented.
+  presentations and Word documents. Preferred workflow: Maple researches and
+  supplies an outline/design brief; Cowork produces the polished file.
+  Research on 2026-11-18 found documented Cowork skills and outbound MCP
+  connectors, but no verified public API to start Cowork tasks from Maple.
+  Microsoft 365 Copilot Chat API explicitly excludes file-creation skills.
+  Manual brief handoff is feasible; a custom connector would require approved
+  hosting/authentication and initiation in Cowork. Not implemented.
 - Add a model picker to Maple's system tray menu. Deferred; not implemented.
+- Upgrade document creation with curated themes, varied layouts, visuals and
+  rendered-preview quality checks. Proposed; not implemented.
 - Maple uses the supplied Maple-Animation-Pack WebPs for matching idle,
   greeting, thinking, listening, and reaction states at 1.5x playback speed.
   States without matching animations retain their PNG poses.
@@ -46,3 +55,7 @@ to provide conversation context. It is not model training or a full chat log.
   Implemented without Office or Cowork; supports text slides, document sections
   and tables, and spreadsheet values. Existing-file editing, images, charts,
   templates, and work-data integrations are not implemented.
+- Maple has a read-only live activity window, opened from the tray menu or
+  Alt+Shift+L, for watching emitted GitHub Copilot output during long tasks.
+  Recent output is bounded and held in memory; this is not an interactive
+  terminal or a full tool trace, and tools may run without emitting output.

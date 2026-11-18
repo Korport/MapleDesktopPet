@@ -1,0 +1,23 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #171b22;
+  color: #e8edf2;
+}
+body { margin: 0; height: 100vh; display: flex; flex-direction: column; }
+header { padding: 18px 24px; border-bottom: 1px solid #46515e; }
+h1 { margin: 0; font-size: 20px; color: #ffba78; }
+p { color: #bac5cf; font-size: 13px; max-width: 760px; }
+label, #status { font-size: 13px; }
+#status { margin-left: 20px; color: #bac5cf; }
+pre {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 20px 24px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 14px/1.6 Consolas, monospace;
+  user-select: text;
+}

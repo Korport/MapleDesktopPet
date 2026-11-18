@@ -9,6 +9,42 @@ app.setName('Maple');
 let win = null;
 let tray = null;
 let clickThrough = false;
+let activityWin = null;
+let activityText = '';
+const MAX_ACTIVITY_LENGTH = 200000;
+
+function appendActivity(text) {
+  activityText = (activityText + text).slice(-MAX_ACTIVITY_LENGTH);
+  if (activityWin && !activityWin.isDestroyed()) {
+    activityWin.webContents.send('activity:changed', activityText);
+  }
+}
+
+function showActivity() {
+  if (activityWin && !activityWin.isDestroyed()) {
+    if (activityWin.isMinimized()) activityWin.restore();
+    activityWin.show();
+    activityWin.focus();
+    return;
+  }
+  activityWin = new BrowserWindow({
+    title: 'Maple - Live activity',
+    width: 900,
+    height: 600,
+    minWidth: 420,
+    minHeight: 300,
+    backgroundColor: '#171b22',
+    webPreferences: {
+      preload: path.join(__dirname, 'activity-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  activityWin.setMenuBarVisibility(false);
+  activityWin.loadFile(path.join(__dirname, 'renderer', 'activity.html'));
+  activityWin.on('closed', () => { activityWin = null; });
+}
 
 const WIN_WIDTH = 260;
 const WIN_HEIGHT = 300;
@@ -130,7 +166,7 @@ function askCopilot(message) {
       "user you're restarting to apply it. If any of these tools report nothing to do, or an error, tell the user " +
       'exactly what they said. ' +
       `The user says: ${message}`;
-    const args = ['-p', prompt, '-s', '--no-color'];
+    const args = ['-p', prompt, '-s', '--no-color', '--stream', 'on'];
     args.push(copilotSessionStarted ? `--resume=${copilotSessionId}` : `--session-id=${copilotSessionId}`);
     copilotSessionStarted = true;
     args.push(
@@ -147,17 +183,30 @@ function askCopilot(message) {
     // quoting them, so a multi-word message gets split into extra CLI args.
     // Quote everything ourselves and hand spawn a single command string.
     const quote = (a) => `"${String(a).replace(/"/g, '\\"')}"`;
+    appendActivity(`\n--- ${new Date().toLocaleTimeString()} | Working ---\nYou: ${message}\n\n`);
     const child = isWin
       ? spawn(['copilot.cmd', ...args].map(quote).join(' '), { shell: true, windowsHide: true, cwd: PROJECT_DIR })
       : spawn('copilot', args, { windowsHide: true, cwd: PROJECT_DIR });
 
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (d) => { stdout += d.toString(); });
-    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (d) => {
+      stdout += d;
+      appendActivity(d);
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+      appendActivity(d);
+    });
 
-    child.on('error', (err) => reject(err));
+    child.on('error', (err) => {
+      appendActivity(`\n[Failed to start: ${err.message}]\n`);
+      reject(err);
+    });
     child.on('close', (code) => {
+      appendActivity(`\n[${code === 0 ? 'Finished' : `Process exited: ${code}`}]\n`);
       if (code === 0) {
         resolve(stdout.trim());
       } else {
@@ -209,6 +258,10 @@ function createTray() {
     {
       label: 'Reset position',
       click: () => resetPosition(),
+    },
+    {
+      label: 'Open live activity (Alt+Shift+L)',
+      click: () => showActivity(),
     },
     {
       label: 'Click-through mode',
@@ -338,6 +391,7 @@ app.whenReady().then(() => {
   globalShortcut.register('Alt+Shift+M', () => toggleVisibility());
   globalShortcut.register('Alt+Shift+C', () => setClickThrough(!clickThrough));
   globalShortcut.register('Alt+Shift+R', () => resetPosition());
+  globalShortcut.register('Alt+Shift+L', () => showActivity());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -377,4 +431,11 @@ ipcMain.handle('mascot:ask-copilot', async (_event, message) => {
 
 ipcMain.on('mascot:resize-content', (_event, contentHeight) => {
   resizeToContent(contentHeight);
+});
+
+ipcMain.handle('activity:snapshot', (event) => {
+  if (!activityWin || event.sender !== activityWin.webContents) {
+    throw new Error('Activity is only available in the Maple activity window.');
+  }
+  return activityText;
 });
