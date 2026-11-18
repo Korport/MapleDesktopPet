@@ -18,6 +18,9 @@ to provide conversation context. It is not model training or a full chat log.
 - Explore connecting Maple to the user's work Copilot/Work IQ context through
   an organization-approved integration. Feasibility and access are unverified;
   not implemented.
+- Explore connecting Maple to Microsoft Copilot Cowork to create PowerPoint
+  presentations and Word documents. Proposed; direct invocation support and
+  organization-approved access remain unverified. Not implemented.
 - Add a model picker to Maple's system tray menu. Deferred; not implemented.
 - Maple uses the supplied Maple-Animation-Pack WebPs for matching idle,
   greeting, thinking, listening, and reaction states at 1.5x playback speed.
@@ -38,3 +41,8 @@ to provide conversation context. It is not model training or a full chat log.
 
 - Use this file for persistent conversation notes, rather than relying only on
   the current session's history.
+- Maple can create local PowerPoint (.pptx), Word (.docx), and Excel (.xlsx)
+  files through create_office_file, saved with unique names in Documents\Maple.
+  Implemented without Office or Cowork; supports text slides, document sections
+  and tables, and spreadsheet values. Existing-file editing, images, charts,
+  templates, and work-data integrations are not implemented.

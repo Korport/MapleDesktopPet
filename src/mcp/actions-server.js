@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Tiny local MCP server exposing exactly five SAFE desktop actions for the
+ * Tiny local MCP server exposing narrowly scoped desktop actions for the
  * mascot's Copilot CLI session: opening a path in File Explorer, opening a
  * URL in the default browser, committing/pushing THIS project's own repo,
  * running its test suite, and requesting a self-restart so code changes take
- * effect. Nothing else — no general shell, no arbitrary process launch.
+ * effect, plus creating local Office files. No general shell or arbitrary
+ * process launch.
  *
  * Safety notes:
  *  - open_path/open_url call `explorer.exe` directly via execFile (array
@@ -45,12 +46,15 @@ const { execFile } = require('child_process');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { z } = require('zod');
+const { registerOfficeTools } = require('./office-files');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const RESTART_SENTINEL_PATH =
   process.env.MAPLE_RESTART_SENTINEL || path.join(os.tmpdir(), 'maple-restart-requested');
 
 const server = new McpServer({ name: 'mascot-actions', version: '1.0.0' });
+registerOfficeTools(server,
+  process.env.MAPLE_DOCUMENTS_DIR || path.join(os.homedir(), 'Documents', 'Maple'));
 
 function openWithExplorer(target) {
   return new Promise((resolve, reject) => {

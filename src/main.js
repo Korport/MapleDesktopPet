@@ -31,9 +31,9 @@ function restartSentinelPath() {
   return path.join(app.getPath('userData'), 'maple-restart-requested');
 }
 
-// Writes the local MCP server config (once) that exposes exactly five safe
-// desktop actions — open_path / open_url / git_commit_and_push / run_tests /
-// restart_app — to the Copilot CLI session. See src/mcp/actions-server.js
+// Writes the local MCP server config (once) that exposes narrowly scoped
+// desktop actions and Office-file creation to the Copilot CLI session.
+// See src/mcp/actions-server.js
 // for what those tools can and can't do.
 function ensureMcpConfig() {
   if (mcpConfigPath) return mcpConfigPath;
@@ -46,7 +46,10 @@ function ensureMcpConfig() {
         type: 'local',
         command: 'node',
         args: [ACTIONS_SERVER_PATH],
-        env: { MAPLE_RESTART_SENTINEL: restartSentinelPath() },
+        env: {
+          MAPLE_RESTART_SENTINEL: restartSentinelPath(),
+          MAPLE_DOCUMENTS_DIR: path.join(app.getPath('documents'), 'Maple'),
+        },
       },
     },
   };
@@ -65,7 +68,8 @@ function ensureMcpConfig() {
 //   --allow-tool mascot_actions   lets it open a path in Explorer, open a URL
 //                                  in the browser, commit+push its own code,
 //                                  run its test suite, and request a
-//                                  self-restart — via the tiny MCP server
+//                                  self-restart, and create Office files
+//                                  in Documents\Maple via the tiny MCP server
 //                                  above. Nothing else (no general shell).
 // Deliberately hard-blocked: shell — Copilot auto-runs commands it decides
 // are "read-only" (whoami, git status, etc.) even without an allow rule, so
@@ -116,6 +120,9 @@ function askCopilot(message) {
       'Update it with lasting preferences, decisions, and ideas from this conversation, keeping notes concise and avoiding duplicates. ' +
       'Do not store secrets, sensitive personal details, or full transcripts. Respect requests not to remember or to remove notes. ' +
       'Only claim a memory was saved after a successful file write, and report any memory read or write failure. ' +
+      'Use create_office_file to create PowerPoint (.pptx), Word (.docx), and Excel (.xlsx) files when asked. ' +
+      'It saves uniquely named files in the user\'s Documents\\Maple folder without requiring Office or Cowork. ' +
+      'Report the saved path only after the tool succeeds. These are local user resources, not code; never commit them. ' +
       'You do not have general git or shell access. When you finish a code change you are happy with, you may call ' +
       'the run_tests tool to check it, then call git_commit_and_push with a short, descriptive commit message to ' +
       'save and publish it to GitHub — that is the only way to commit or push. After a change to main.js or any ' +

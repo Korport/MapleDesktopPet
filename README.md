@@ -25,12 +25,25 @@ files/folders/webpages for you, all within tightly scoped permissions.
   session keeps conversational context via `--resume`.
 - **Self-editing**: Maple is granted `read`/`write` access scoped *only* to
   her own project folder, so she can patch her own source files when asked.
+- **Local Office creation**: ask Maple to make editable PowerPoint (`.pptx`),
+  Word (`.docx`), or Excel (`.xlsx`) files. Files are saved under your Windows
+  Documents folder in `Maple`, with unique names so existing files are never
+  overwritten. No Office installation, Cowork connection, or extra subscription
+  is needed for file generation.
 - **Safe desktop actions** via a tiny custom local MCP server
-  (`src/mcp/actions-server.js`) that exposes exactly three tools:
+  (`src/mcp/actions-server.js`):
   - `open_path` — open a file or folder in File Explorer (path must exist)
   - `open_url` — open an `http(s)://` URL in the default browser
   - `git_commit_and_push` — stage, commit, and push her own code changes to
     GitHub via a fixed add/commit/push sequence (no raw git/shell access)
+  - `run_tests` — run Maple's fixed test command
+  - `restart_app` — request a self-restart to apply code changes
+  - `create_office_file` — create local Word documents with headings,
+    paragraphs, lists, and tables; widescreen PowerPoint slides with titles
+    and bullets; or Excel workbooks with named sheets and typed cell values.
+    Spreadsheet strings are not executed as formulas. This first version
+    does not edit existing documents or support images, templates, charts,
+    macros, or live work-data connections. Content is limited to 1 MB per file.
   - General shell execution is explicitly denied (`--deny-tool shell`), so
     she cannot run arbitrary commands.
 - **Click-through mode** (`Alt+Shift+C`) to let mouse clicks pass through her
@@ -93,7 +106,8 @@ src/
                         bridge (askCopilot).
   preload.js            contextBridge API exposed to the renderer.
   mcp/
-    actions-server.js   Local MCP server: open_path / open_url / git_commit_and_push only.
+    actions-server.js   Narrowly scoped desktop-action MCP server.
+    office-files.js     Local Office Open XML generation and creation tool.
   renderer/
     index.html           Window markup (sprite, bubble, chat form, tray controls).
     renderer.js           Chat wiring, Copilot bridge calls, reaction picking.
@@ -115,11 +129,12 @@ memory.md                Maple's own persisted notes across conversations.
 Maple's Copilot CLI session is launched with a deliberately narrow set of
 permissions on every call (see the comments in `src/main.js`):
 
-- `--add-dir` scoped to this project folder only — she can't read/write
-  files anywhere else on disk.
+- `--add-dir` scoped to this project folder only for general file access.
+  Office creation separately writes only to the Documents `Maple` folder
+  through the narrowly scoped MCP tool; it does not grant general file access.
 - `--allow-tool read` / `--allow-tool write` — lets her view and edit her
   own source.
-- `--allow-tool mascot_actions` — the three safe tools above, nothing else.
+- `--allow-tool mascot_actions` — the scoped tools above.
 - `--deny-tool shell` — **hard-blocks all shell command execution**,
   including commands Copilot might otherwise auto-run as "read-only".
 
