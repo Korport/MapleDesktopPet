@@ -29,6 +29,22 @@ const Sprite = (() => {
     email_alert: 'maple-email-alert.webp',
     teams_alert: 'maple-teams-alert.webp',
   };
+  const EXTRA_ANIMATION_BASE = '../assets/Maple-Extra-Animations/';
+  const EXTRA_ANIMATIONS = {
+    idle_yawn: 'maple-yawning.webp',
+    idle_sleep: 'maple-sleeping.webp',
+    idle_stretch: 'maple-stretching.webp',
+    talking: 'maple-talking.webp',
+    concerned: 'maple-concerned.webp',
+    surprised: 'maple-surprised.webp',
+    loving: 'maple-loving.webp',
+    laughing: 'maple-laughing.webp',
+    embarrassed: 'maple-shy.webp',
+    proud: 'maple-proud.webp',
+    sad: 'maple-sad.webp',
+    goodbye: 'maple-goodbye.webp',
+    startled: 'maple-startled-dragged.webp',
+  };
   const animationCache = new Map();
   let requestedSource = null;
   let showVersion = 0;
@@ -114,11 +130,14 @@ const Sprite = (() => {
 
   function show(key) {
     if (stateLabel) stateLabel.textContent = key.replace(/_/g, ' ');
-    const source = ANIMATIONS[key] ? ANIMATION_BASE + ANIMATIONS[key] : BASE + FILES[key];
+    const animation = EXTRA_ANIMATIONS[key]
+      ? EXTRA_ANIMATION_BASE + EXTRA_ANIMATIONS[key]
+      : ANIMATIONS[key] ? ANIMATION_BASE + ANIMATIONS[key] : null;
+    const source = animation || BASE + FILES[key];
     if (source === requestedSource) return;
     requestedSource = source;
     const version = ++showVersion;
-    if (!ANIMATIONS[key]) {
+    if (!animation) {
       img.src = source;
       return;
     }
@@ -214,8 +233,7 @@ const Sprite = (() => {
   }
 
   function setAmplitude(v) {
-    // No per-frame talk/listen animation frames (yet) — use amplitude to add
-    // a tiny lively bounce via CSS instead of swapping images.
+    // Add a tiny amplitude-driven bounce alongside the animation.
     amplitude = Math.max(0, Math.min(1, v));
     const scale = 1 + amplitude * 0.04;
     img.style.transform = `scale(${scale})`;

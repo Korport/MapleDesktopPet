@@ -75,21 +75,26 @@ test('caches retimed animations and does not restart an unchanged loop', async (
   await settle();
   assert.equal(app.assignments.length, 1);
   app.sprite.setState('talking');
+  await settle();
   app.sprite.setState('thinking');
   await settle();
-  assert.equal(app.fetches, 1);
-  assert.equal(app.blobs.length, 1);
+  assert.equal(app.fetches, 2);
+  assert.equal(app.blobs.length, 2);
   assert.equal(app.assignments.at(-1), 'blob:maple-1');
 });
 
-test('a late animation load cannot overwrite a newer static pose', async () => {
+test('a late animation load cannot overwrite a newer extra-pack animation', async () => {
   let resolve;
-  const app = setup(() => new Promise(done => { resolve = done; }));
+  const app = setup(source => source.endsWith('maple-thinking.webp')
+    ? new Promise(done => { resolve = done; })
+    : animation([150]));
   app.sprite.setState('thinking');
   app.sprite.setState('talking');
+  await settle();
+  assert.deepEqual(app.assignments, ['blob:maple-1']);
   resolve(animation([150]));
   await settle();
-  assert.deepEqual(app.assignments, ['../assets/sprites/08-talking.png']);
+  assert.deepEqual(app.assignments, ['blob:maple-1']);
 });
 
 test('invalid animation data logs an error and retains original playback', async () => {
@@ -119,10 +124,48 @@ test('plays the supplied animation pack for matching states', async () => {
       assert.equal(source, `../assets/Maple-Animation-Pack/Maple-Animations/${filename}`);
       return fs.readFileSync(path.resolve(__dirname, '..', 'src', 'renderer', source));
     });
+
     app.sprite.setState(state);
     await settle();
     assert.deepEqual(app.errors, [], state);
     assert.equal(app.blobs.length, 1, state);
     assert.deepEqual(app.assignments, ['blob:maple-1'], state);
+  }
+});
+
+test('replaces all remaining static poses with the supplied extra animations', async () => {
+  const states = {
+    idle_yawn: 'maple-yawning.webp',
+    idle_sleep: 'maple-sleeping.webp',
+    idle_stretch: 'maple-stretching.webp',
+    talking: 'maple-talking.webp',
+    concerned: 'maple-concerned.webp',
+    surprised: 'maple-surprised.webp',
+    loving: 'maple-loving.webp',
+    laughing: 'maple-laughing.webp',
+    embarrassed: 'maple-shy.webp',
+    proud: 'maple-proud.webp',
+    sad: 'maple-sad.webp',
+    goodbye: 'maple-goodbye.webp',
+    startled: 'maple-startled-dragged.webp',
+  };
+  for (const [state, filename] of Object.entries(states)) {
+    const app = setup(async source => {
+      assert.equal(source, `../assets/Maple-Extra-Animations/${filename}`);
+      return fs.readFileSync(path.resolve(__dirname, '..', 'src', 'renderer', source));
+    });
+    app.sprite.setState(state);
+    await settle();
+    assert.deepEqual(app.errors, [], state);
+    assert.equal(app.blobs.length, 1, state);
+    assert.deepEqual(app.assignments, ['blob:maple-1'], state);
+    const bytes = Buffer.from(await app.blobs[0].arrayBuffer());
+    let frames = 0;
+    for (let offset = 12; offset < bytes.length;) {
+      const size = bytes.readUInt32LE(offset + 4);
+      if (bytes.toString('ascii', offset, offset + 4) === 'ANMF') frames++;
+      offset += 8 + size + size % 2;
+    }
+    assert.ok(frames > 1, `${state} must be animated`);
   }
 });

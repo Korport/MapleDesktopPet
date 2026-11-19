@@ -35,10 +35,14 @@ to provide conversation context. It is not model training or a full chat log.
   rendered-preview quality checks. Proposed; not implemented.
 - Maple uses the supplied Maple-Animation-Pack WebPs for matching idle,
   greeting, thinking, listening, and reaction states at 1.5x playback speed.
-  States without matching animations retain their PNG poses.
+  The 13 Maple-Extra-Animations WebPs now replace the remaining static poses:
+  talking, yawning, sleeping, stretching, concerned, surprised, loving,
+  laughing, shy, proud, sad, goodbye, and startled/dragged, also at 1.5x.
 - The user is planning animation assets and wants a broad set of Maple reactions,
   including email and Teams alerts. Notification reactions are now wired to
   the supplied email/Teams animations; more reactions remain proposed.
+- The user likes Maple's current animations and wants to create more to replace
+  static PNG poses. Both supplied animation packs are now connected.
 - The user wants Maple to eventually act as a desktop frontend for their own
   internal Copilot "Autopilot" (an org-internal autonomous Copilot agent),
   once/if that Autopilot exposes MCP access. The idea: keep Maple's existing
