@@ -1,0 +1,7 @@
+{
+  "name": "aws4",
+  "version": "1.13.2",
+  "description": "Local no-op stand-in for aws4, used to avoid installing the real package.",
+  "main": "index.js",
+  "license": "MIT"
+}

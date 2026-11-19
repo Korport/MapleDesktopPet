@@ -12,6 +12,8 @@ to provide conversation context. It is not model training or a full chat log.
   varied styles, rather than plain title-and-bullet layouts.
 - The user wants terminal-like detail in Maple's live activity, including
   tool calls, results, progress, and exposed reasoning summaries.
+- The user wants unused AWS publishing dependencies, including `aws4`, removed
+  cleanly from Maple's build tooling. Implemented 2026-11-19.
 
 ## Ideas for later
 
@@ -51,6 +53,14 @@ to provide conversation context. It is not model training or a full chat log.
 
 - Use this file for persistent conversation notes, rather than relying only on
   the current session's history.
+- Maple's `electron-builder` devDependency transitively declares `aws4`
+  (via `electron-publish`'s S3/Spaces auto-publish code path, which Maple
+  never configures or uses — confirmed no installed electron-builder package
+  actually imports it). An npm `overrides` entry in package.json resolves
+  `aws4` to a local no-op stub at `vendor/aws4-stub` instead of installing
+  the real package, so `node_modules/aws4` no longer exists. The stub's
+  `sign()` throws a clear error if ever actually called. Packaging
+  (`npm run dist`/`dist:dir`) was verified to still work after the swap.
 - Maple can create local PowerPoint (.pptx), Word (.docx), and Excel (.xlsx)
   files through create_office_file, saved with unique names in Documents\Maple.
   Implemented without Office or Cowork; supports text slides, document sections
